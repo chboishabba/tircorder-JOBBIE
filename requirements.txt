@@ -1,3 +1,4 @@
 whisper
+whisper-ctranslate2
 numpy
 torch
