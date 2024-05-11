@@ -4,7 +4,7 @@
 
 The BETA TiRCORDER Voice-Activated Recorder (codename 'jobbie') is a component of the larger ITIR project, which aims to provide a comprehensive suite of tools for recording and analyzing various forms of data. This specific component focuses on intelligently managing audio recordings through voice activation, ensuring efficient data capture and storage. More details about the larger project can be found at [TFYQA.biz](https://TFYQA.biz).
 
-##TiRCorder Specifics
+## TiRCorder Specifics
 
 TiRCorder, specifically tailored for professional environments, prioritizes security, efficiency, and user experience:
 
@@ -15,7 +15,7 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
     - **GPU Acceleration**: Leverages GPU capabilities for enhanced performance (CPU also supported).
     - **Whisper-ctranslate2 Integration**: Offers a choice between ultra-fast [cTranslate2-powered](https://github.com/Softcatala/whisper-ctranslate2) transcription and versatile Python-based [Whisper](https://github.com/openai/whisper)	 for extended functionality.
 
-Coming Soon
+## Coming Soon
 
     - **Speaker Diarization**
     - **Word-level Transcripts**
@@ -38,7 +38,7 @@ Ensure you have Python 3.8 (tested 3.9.18 arch linux) or higher installed on you
 ```cmd
 python --version
 
-#Dependencies
+# Dependencies
 
 TiRCorder requires the command-line tool ffmpeg to be installed on your system, which is available from most package managers:
 
@@ -62,7 +62,7 @@ You may need rust installed as well, in case tiktoken does not provide a pre-bui
 pip install setuptools-rust
 
 
-##Setup
+## Setup
 
 Clone the repository to your local machine:
 
@@ -82,7 +82,7 @@ Most users will want mode 1. In this mode, the application will run in the backg
 
 It is recommended to disable when consuming media within range of the microphone as excessive storage may be consumed.
 
-###Configuration
+### Configuration
 Choose betwen whisper-python and ctranslate
 
 
