@@ -4,7 +4,7 @@
 TiRCorder is an integral component of the Intergenerational Trauma-Informed Identity Rebuilder (ITIR) toolset. This multifaceted suite is designed to tackle complex challenges in data management, security, and user interaction, with a special focus on addressing the needs of those dealing with intergenerational trauma. Licensed under the Mozilla Public License, ITIR embodies a commitment to open, secure, and ethical technology development.
 
 
-The BETA TiRCORDER Voice-Activated Recorder (codename 'jobbie') is a component of the larger ITIR project, which aims to provide a comprehensive suite of tools for recording and analyzing various forms of data. This specific component focuses on intelligently managing audio recordings through voice activation, ensuring efficient data capture and storage. More details about the larger project can be found at [TFYQA.biz](https://TFYQA.biz).
+The BETA TiRCORDER Voice-Activated Recorder (codename 'jobbie') is a component of the larger ITIR project, which aims to provide a comprehensive suite of tools for recording and analyzing various forms of data. This specific component focuses on intelligently managing audio recordings through voice activation, ensuring efficient data capture and storage. More details about the larger project can be found at [TFYQA.biz](https://TFYQA.biz). If you found this tool useful, [buy us a coffee](https://www.paypal.com/paypalme/JohnABrown)!
 
 ## TiRCorder Specifics
 
