@@ -99,7 +99,7 @@ Contributing
 
 Contributions to the TiRCORDER project are welcome. Please fork the repository, make your changes, and submit a pull request for review.
 ## License
-```
+
 ITIR and TiRCorder are products of TFYQA.biz provided under [Mozilla Public License - MPL 2.0](https://www.mozilla.org/en-US/MPL/). 
 All rights are reserved where permitted.
-```
+
