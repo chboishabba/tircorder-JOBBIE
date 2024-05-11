@@ -1,6 +1,3 @@
-It looks like the markdown in your README needs some corrections to improve formatting and ensure proper display on platforms like GitHub. Here’s a refined version with corrected markdown syntax:
-
-```markdown
 # TiRCorder: Part of the ITIR Suite
 
 TiRCorder is an integral component of the **Intergenerational Trauma-Informed Identity Rebuilder (ITIR)** toolset. This multifaceted suite is designed to tackle complex challenges in data management, security, and user interaction, with a special focus on addressing the needs of those dealing with intergenerational trauma. Licensed under the Mozilla Public License, ITIR embodies a commitment to open, secure, and ethical technology development.
@@ -16,7 +13,7 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 - **Professional-Grade**: Designed for on-site data retention to meet stringent professional standards.
 - **Multiple Client Support**: Equipped to handle numerous clients recording simultaneously.
 - **GPU Acceleration**: Leverages GPU capabilities for enhanced performance (CPU also supported).
-- **Whisper-ctranslate2 Integration**: Offers a choice between ultra-fast [cTranslate2-powered](https://github.com/Softcatala/whisper-ctranslate2) transcription and versatile Python-based [Whisper](https://github.com/openai/whisper) for extended functionality.
+- **Whisper-ctranslate2 Integration**: Offers a choice between ultra-fast [cTranslate2-powered transcription](https://github.com/Softcatala/whisper-ctranslate2) and versatile Python-based [Whisper](https://github.com/openai/whisper) for extended functionality.
 
 ## Coming Soon
 
@@ -32,21 +29,23 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 - **Activity-Based Recording Management**: Adjusts recording sensitivity based on user activity.
 - **Resource Efficient**: Optimizes CPU and memory usage to ensure minimal impact on system performance.
 - **Adaptive Recording**: Changes recording intervals based on detected activity to save storage and processing power.
-- **Separated Concerns**: Manage transcription on an external machine, ensuring the client can get on with things.
+- **Separated concerns**: Manage transcription on an external machine, ensuring the client can get on with things.
 
 ## Installation
 
-Ensure you have Python 3.8 (tested 3.9.18 arch linux) or higher installed on your system. Run `tircorder-linux.py` on linux. You can check your Python version by running:
+Ensure you have Python 3.8 (tested 3.9.18 on Arch Linux) or higher installed on your system. Run `tircorder-linux.py` on Linux. You can check your Python version by running:
 
-```bash
+```cmd
 python --version
 ```
 
-### Dependencies
 
-TiRCorder requires the command-line tool ffmpeg to be installed on your system, which is available from most package managers:
 
-```bash
+## Dependencies
+
+TiRCorder requires the command-line tool `ffmpeg` to be installed on your system, which is available from most package managers:
+
+```cmd
 # on Ubuntu or Debian
 sudo apt update && sudo apt install ffmpeg
 
@@ -63,9 +62,9 @@ choco install ffmpeg
 scoop install ffmpeg
 ```
 
-You may need rust installed as well, in case tiktoken does not provide a pre-built wheel for your platform. If you see installation errors during setup, please follow the [Getting started](https://www.rust-lang.org/learn/get-started) page to install Rust development environment. Additionally, you may need to configure the PATH environment variable, e.g., export PATH="$HOME/.cargo/bin:$PATH". If the installation fails with `No module named 'setuptools_rust'`, you need to install setuptools_rust, e.g., by running:
+You may need Rust installed as well, in case tiktoken does not provide a pre-built wheel for your platform. If you see installation errors during setup, please follow the [Getting started](https://www.rust-lang.org/learn/get-started) page to install the Rust development environment. Additionally, you may need to configure the PATH environment variable, e.g., export PATH="$HOME/.cargo/bin:$PATH". If the installation fails with `No module named 'setuptools_rust'`, you need to install setuptools_rust, e.g., by running:
 
-```bash
+```cmd
 pip install setuptools-rust
 ```
 
@@ -73,7 +72,7 @@ pip install setuptools-rust
 
 Clone the repository to your local machine:
 
-```bash
+```cmd
 git clone https://github.com/yourusername/tircorder.git
 cd tircorder
 python tircorder.py
@@ -83,8 +82,14 @@ python tircorder.py
 
 To start the voice-activated recorder, navigate to the cloned directory and run:
 
-```bash
+```cmd
 python tircorder.py
+```
+
+or
+
+```
+python tircorder-linux.py
 ```
 
 Most users will want mode 1. In this mode, the application will run in the background, monitoring for voice activity and user interactions to manage recording intervals intelligently. It will process recordings as they appear. You may notice some performance degradation while transcription is occurring.
@@ -99,11 +104,8 @@ Modify the `config.py` file to adjust the sensitivity settings and other prefere
 
 ## Contributing
 
-Contributions to the TiRCORDER project are welcome. Please fork the repository, make your changes, and
-
- submit a pull request for review.
+Contributions to the TiRCORDER project are welcome. Please fork the repository, make your changes, and submit a pull request for review.
 
 ## License
 ```
 
-This revised markdown version includes proper bullet points, better sectioning, and the use of code blocks where appropriate. It is formatted for better readability and usability on platforms that support markdown rendering, such as GitHub.
