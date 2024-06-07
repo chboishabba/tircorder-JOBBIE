@@ -1,0 +1,15 @@
+/* custom.css */
+body {
+    font-family: Arial, sans-serif;
+}
+
+#timeline {
+    display: flex;
+    flex-direction: column;
+}
+
+.recording {
+    margin: 10px 0;
+    cursor: pointer;
+}
+ 

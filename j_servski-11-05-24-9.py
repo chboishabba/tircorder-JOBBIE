@@ -13,6 +13,7 @@ import datetime
 import whisper
 import numpy as np
 import torch
+import json
 #from whisper_ctranslate2 import WhisperTranslator
 
 
@@ -41,6 +42,12 @@ skip_reasons = [
 
 
 
+TRANSCRIBE_ACTIVE = Event()
+KNOWN_FILES = set()
+SKIP_FILES = set()
+TRANSCRIBE_QUEUE = Queue()
+CONVERT_QUEUE = Queue()
+
 
 active_processes = []
 process_status = 'housekeeping'
@@ -63,6 +70,17 @@ transcription_complete = Event()# Event to manage synchronization between transc
 # Load the model once and keep it in memory
 model = whisper.load_model("medium.en", device="cpu")
 #translator = WhisperTranslator.from_whisper_model(model, device="cpu")  # You can specify "cuda" or "cpu" depending on your setup # Convert Whisper model to CTranslate2
+
+def valid_filename(file):
+    try:
+        datetime.datetime.strptime(file, '%Y-%m-%d_%H-%M-%S')
+        return True
+    except ValueError:
+        return False
+        
+def check_for_subtitle(prefix):
+    extensions = ['.vtt', '.srt', '.txt', '.json']
+    return any(os.path.exists(prefix + ext) for ext in extensions)        
 
 
 def transcribe_audio(file_path):
@@ -90,12 +108,88 @@ def transcribe_audio(file_path):
         logging.error(f"Unhandled error in transcribing audio {filename}: {e}")
         skip_files[filename] = skip_reasons.index("Error in transcription")  # General transcription error
         return None
+        
+        
+        
+        
+        
+        
+        
+
+
+# Worker functions
+def scanner(directory):
+    global KNOWN_FILES
+    while True:
+        try:
+            current_files = set(os.listdir(directory))
+            new_files = current_files - KNOWN_FILES
+
+            for file in new_files:
+                if file in SKIP_FILES:
+                    continue
+
+                prefix, extension = os.path.splitext(file)
+                if not valid_filename(prefix):
+                    logging.error(f"Filename {file} does not match the expected format and will be ignored.")
+                    continue
+
+                if extension in ['.wav', '.flac']:
+                    if check_for_subtitle(prefix):
+                        logging.info(f"Skipping {file}: subtitle file already exists.")
+                        continue
+
+                    if extension == '.wav' and not os.path.exists(prefix + '.flac'):
+                        TRANSCRIBE_QUEUE.put(file)
+                        logging.info(f"File {file} added to transcription queue")
+
+                    if extension == '.flac':
+                        TRANSCRIBE_QUEUE.put(file)
+                        logging.info(f"File {file} added to transcription queue for flac")
+
+                KNOWN_FILES.add(file)
+
+        except Exception as e:
+            logging.error(f"Error in scanner: {e}")
+
+def transcriber():
+    while True:
+        file = TRANSCRIBE_QUEUE.get()
+        TRANSCRIBE_ACTIVE.set()
+        # Simulate transcription process
+        logging.info(f"Starting transcription for {file}.")
+        # Imagine transcription happens here
+        TRANSCRIBE_ACTIVE.clear()
+        CONVERT_QUEUE.put(file)
+        logging.info(f"Transcription completed for {file}. File added to conversion queue.")
+        TRANSCRIBE_QUEUE.task_done()
+
+def converter():
+    while True:
+        file = CONVERT_QUEUE.get(block=True)
+        if TRANSCRIBE_ACTIVE.is_set():
+            CONVERT_QUEUE.put(file)
+            logging.info(f"Conversion delayed for {file}, waiting for transcription to complete.")
+            continue
+
+        # Simulate conversion process
+        logging.info(f"Starting conversion for {file}.")
+        # Imagine conversion happens here
+        logging.info(f"Conversion completed for {file}.")
+        CONVERT_QUEUE.task_done()
+
+
+
+
+##END GPT 4 segment 12-05-2024##
+        
 
 
 
 
 
 def scanner(directory, known_files, currently_processing, file_groups):
+    subtitle_extensions = ['.vtt', '.srt', '.txt', '.json']  # Define subtitle extensions once at the start
     while True:
         try:
             current_files = set(os.listdir(directory))
@@ -110,27 +204,59 @@ def scanner(directory, known_files, currently_processing, file_groups):
                         datetime.datetime.strptime(prefix, '%Y-%m-%d_%H-%M-%S')
                         if prefix not in file_groups:
                             file_groups[prefix] = []
-                        if extension not in file_groups[prefix]:
-                            file_groups[prefix].append(extension)
+                        file_groups[prefix].append(extension)
+
+                        # Check for existing subtitle files for each audio file
+                        if extension in ['.wav', '.flac']:
+                            subtitles_exist = any(os.path.exists(prefix + ext) for ext in subtitle_extensions)
+                            if subtitles_exist:
+                                logging.info(f"Skipping processing for {file}: subtitle file already exists.")
+                                continue
+
+                            if extension == ".wav":
+                                # Check if corresponding flac exists
+                                flac_exists = os.path.exists(prefix + '.flac')
+                                if not flac_exists:
+                                    # If no corresponding flac, add wav to transcribe and possibly to convert
+                                    subtitles_exist = any(os.path.exists(prefix + ext) for ext in subtitle_extensions)
+                                    if subtitles_exist:
+                                        logging.info(f"Skipping processing for {file}: subtitle file already exists.")
+                                        continue
+                                    else:
+                                        transcribe_queue.put(file)
+                                        currently_processing.add(file)
+                                        logging.info(f"File {file} added to transcription queue")
+                                else:
+                                    logging.info(f"Skipping FLAC conversion for {file}: FLAC file already exists.")
+                            
+                            elif extension == ".flac":
+                                # Add flac files to the transcription queue if no subtitles exist
+                                transcribe_queue.put(file)
+                                currently_processing.add(file)
+                                logging.info(f"File {file} added to transcription queue for flac")
+
+                        elif extension in subtitle_extensions:
+                            # Ignore subtitle files if there is no corresponding audio file
+                            audio_files_exist = any(os.path.exists(prefix + ext) for ext in ['.wav', '.flac'])
+                            if not audio_files_exist:
+                                logging.info(f"No corresponding audio file for {file}; skipping.")
+
                         valid_files.append(file)
+
                     except ValueError:
                         logging.error(f"Filename {file} does not match the expected format and will be ignored.")
-                        skip_files[file] = skip_reasons.index("Invalid file format")  # Proper indexing
+                        skip_files[file] = skip_reasons.index("Invalid file format")
                 else:
                     logging.info(f"File {file} is skipped as it's in the skip list.")
-
-            for file in valid_files:
-                if file.endswith(".wav"):
-                    if file not in currently_processing:
-                        transcribe_queue.put(file)
-                        currently_processing.add(file)
-                        logging.info(f"File {file} added to processing queue")
 
             known_files.update(new_files)
 
         except Exception as e:
             logging.error(f"An error occurred in the scanner function: {e}")
         time.sleep(5)
+
+
+
 
 
 
@@ -345,17 +471,17 @@ signal.signal(signal.SIGTERM, handle_shutdown_signal)
 
 
 def export_queues_and_files(known_files, transcribe_queue, convert_queue, skip_files, skip_reasons):
-    import json
     output = {
         "known_files": list(known_files),
         "transcribe_queue": list(transcribe_queue.queue),
         "convert_queue": list(convert_queue.queue),
-        "skip_files": skip_files,
+        "skip_files": list(skip_files),  # Ensure this is serializable
         "skip_reasons": skip_reasons
     }
     with open("state_backup.json", "w") as f:
         json.dump(output, f, indent=4)
     logging.info("State of queues, files, and skip reasons has been saved.")
+
 
 
     
@@ -421,29 +547,30 @@ def load_state_from_disk():
 
 
 
-
 def main():
-    global known_files, transcribe_queue, convert_queue, skip_files
-    known_files, transcribe_queue, convert_queue, skip_files, skip_reasons = load_state_from_disk()
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
 
-    print('ran')
     directory = "/mnt/smbshare/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/"
-    known_files = set()
     currently_processing = set()
     file_groups = defaultdict(list)  # Initialize file_groups
 
+    # Register signal handlers
+    signal.signal(signal.SIGINT, handle_shutdown_signal)
+    signal.signal(signal.SIGTERM, handle_shutdown_signal)
+
     logging.info("Starting scanner thread...")
-    scanner_thread = threading.Thread(target=scanner, args=(directory, known_files, currently_processing, file_groups))
+    scanner_thread = Thread(target=scanner, args=(directory, known_files, currently_processing, file_groups))
     scanner_thread.daemon = True
     scanner_thread.start()
 
     logging.info("Starting transcribe thread...")
-    transcribe_thread = threading.Thread(target=transcribe, args=(currently_processing,))
+    transcribe_thread = Thread(target=transcriber)
     transcribe_thread.daemon = True
     transcribe_thread.start()
 
     logging.info("Starting convert thread...")
-    convert_thread = threading.Thread(target=wav2flac)
+    convert_thread = Thread(target=converter)
     convert_thread.daemon = True
     convert_thread.start()
 
@@ -451,17 +578,14 @@ def main():
         while True:
             time.sleep(5)  # Keep the main thread alive.
             logging.debug("Main loop running...")
-            logging.debug(f"Transcribing Active: {transcribing_active.is_set()}")
+            logging.debug(f"Transcribing Active: {Event().is_set()}")
             logging.debug(f"Transcription Queue Size: {transcribe_queue.qsize()}")
             logging.debug(f"Conversion Queue Size: {convert_queue.qsize()}")
 
     except KeyboardInterrupt:
         logging.info("Shutting down...")
-        
+
 if __name__ == "__main__":
-    # Register signal handlers
-    signal.signal(signal.SIGINT, handle_shutdown_signal)
-    signal.signal(signal.SIGTERM, handle_shutdown_signal)
     main()
 
 
