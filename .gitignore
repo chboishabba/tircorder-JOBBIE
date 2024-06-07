@@ -2,4 +2,7 @@
 *.json
 
 Pelican/**/*.json
+Pelican/**/folders_file.json
+Pelican/**/output/**/timeline.html
+Pelican/**/content/**/timeline.html
 

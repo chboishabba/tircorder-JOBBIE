@@ -24,6 +24,7 @@ if os.path.exists(timeline_path):
     print(f"timeline.html found at {timeline_path}")
 else:
     print("timeline.html not found. Please check generate_content.py for issues.")
+    exit(1)
 
 # Run Pelican to generate the site
 try:
@@ -33,14 +34,11 @@ except subprocess.CalledProcessError as e:
     print(f"Error executing Pelican: {e}")
     exit(1)
 
-# Copy timeline.html to the output directory if it's not there
+# Copy timeline.html to the output directory, always overwriting
 output_timeline_path = os.path.join("output", "timeline.html")
 try:
-    if not os.path.exists(output_timeline_path):
-        shutil.copy(timeline_path, output_timeline_path)
-        print(f"Copied {timeline_path} to {output_timeline_path}")
-    else:
-        print(f"{output_timeline_path} already exists.")
+    shutil.copy(timeline_path, output_timeline_path)
+    print(f"Copied {timeline_path} to {output_timeline_path}")
 except IOError as e:
     print(f"Error copying timeline.html to output directory: {e}")
     exit(1)
