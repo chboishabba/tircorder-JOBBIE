@@ -1,0 +1,5 @@
+# Ignore all .json files
+*.json
+
+Pelican/**/*.json
+
