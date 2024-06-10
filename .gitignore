@@ -6,5 +6,6 @@ Pelican/**/folders_file.json
 Pelican/**/output/**/timeline.html
 Pelican/**/content/**/timeline.html
 
+Pelican/output/*.*
 Pelican/output/symlinks/*.*
 Pelican/output/_HELP_DELETEME symlinks

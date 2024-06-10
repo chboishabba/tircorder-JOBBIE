@@ -2,8 +2,22 @@ document.addEventListener("DOMContentLoaded", function() {
     const timelineItems = document.querySelectorAll(".timeline-item");
 
     timelineItems.forEach(item => {
-        const audio = item.querySelector("audio");
-        const transcript = item.querySelector("pre");
+        const label = item.querySelector(".label");
+        const audioPlayer = item.querySelector(".audio-player");
+        const audio = audioPlayer.querySelector("audio");
+        const source = audio.querySelector("source");
+        const transcript = audioPlayer.querySelector("pre");
+
+        label.addEventListener("click", function() {
+            if (audioPlayer.style.display === "block") {
+                audioPlayer.style.display = "none";
+            } else {
+                audioPlayer.style.display = "block";
+                if (!audio.src) {
+                    audio.src = source.getAttribute("data-src");
+                }
+            }
+        });
 
         audio.addEventListener("timeupdate", function() {
             const currentTime = audio.currentTime;
@@ -11,11 +25,13 @@ document.addEventListener("DOMContentLoaded", function() {
             let highlighted = false;
 
             transcript.innerHTML = lines.map(line => {
-                const timeMatch = line.match(/\[(\d{2}:\d{2}:\d{2})\]/);
+                const timeMatch = line.match(/\d{2}:\d{2}:\d{2},\d{3}/g);
                 if (timeMatch) {
-                    const timeParts = timeMatch[1].split(':');
-                    const timeInSeconds = parseInt(timeParts[0]) * 3600 + parseInt(timeParts[1]) * 60 + parseInt(timeParts[2]);
-                    if (currentTime >= timeInSeconds && !highlighted) {
+                    const [start, end] = timeMatch.map(time => {
+                        const [hours, minutes, seconds] = time.split(':');
+                        return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds.replace(',', '.'));
+                    });
+                    if (currentTime >= start && currentTime <= end && !highlighted) {
                         highlighted = true;
                         return `<span class="highlight">${line}</span>`;
                     }

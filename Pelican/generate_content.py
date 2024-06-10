@@ -58,6 +58,7 @@ html_content = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Audio Recordings Timeline</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="scripts.js" defer></script>
 </head>
 <body>
     <header>
@@ -91,8 +92,13 @@ for match in matches:
                 <div class="timeline-item" data-audio="symlinks/{encoded_audio_symlink}" data-transcript="symlinks/{encoded_transcript_symlink}">
                     <div class="timeline-dot"></div>
                     <div class="timeline-content">
-                        <audio controls src="symlinks/{encoded_audio_symlink}"></audio>
-                        <pre>{transcript_content}</pre>
+                        <span class="label">{os.path.basename(audio_file)}</span>
+                        <div class="audio-player" style="display: none;">
+                            <audio controls>
+                                <source data-src="symlinks/{encoded_audio_symlink}" type="audio/wav">
+                            </audio>
+                            <pre>{transcript_content}</pre>
+                        </div>
                     </div>
                 </div>
     """
@@ -111,8 +117,7 @@ for audio in dangling_audio:
     audio_symlink = os.path.join(symlink_dir, os.path.basename(audio))
     if not os.path.exists(audio_symlink):
         os.symlink(audio, audio_symlink)
-    encoded_audio_symlink = urllib.parse.quote(os.path.basename(audio_symlink))
-    html_content += f"<li>symlinks/{encoded_audio_symlink}</li>"
+    html_content += f"<li>{os.path.basename(audio)}</li>"
 
 html_content += """
                 </ul>
@@ -126,15 +131,13 @@ for transcript in dangling_transcripts:
     transcript_symlink = os.path.join(symlink_dir, os.path.basename(transcript))
     if not os.path.exists(transcript_symlink):
         os.symlink(transcript, transcript_symlink)
-    encoded_transcript_symlink = urllib.parse.quote(os.path.basename(transcript_symlink))
-    html_content += f"<li>symlinks/{encoded_transcript_symlink}</li>"
+    html_content += f"<li>{os.path.basename(transcript)}</li>"
 
 html_content += """
                 </ul>
             </div>
         </section>
     </main>
-    <script src="scripts.js"></script>
 </body>
 </html>
 """
