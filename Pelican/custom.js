@@ -7,4 +7,6 @@ document.querySelectorAll('.recording').forEach(item => {
         // Load and display transcript
     });
 });
- 
+
+
+//probably ignore? 

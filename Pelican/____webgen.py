@@ -1,6 +1,7 @@
 import subprocess
 import os
 import shutil
+import time
 
 # Define the paths to your scripts
 scripts = [
@@ -43,13 +44,29 @@ except IOError as e:
     print(f"Error copying timeline.html to output directory: {e}")
     exit(1)
 
+# Copy CSS and JavaScript files to the output directory
+for file in ["styles.css", "scripts.js"]:
+    try:
+        shutil.copy(file, "output")
+        print(f"Copied {file} to output directory.")
+    except IOError as e:
+        print(f"Error copying {file} to output directory: {e}")
+        exit(1)
+
 # Change directory to output and start the HTTP server
 try:
     os.chdir("output")
     print("Changed directory to output.")
-    subprocess.run(["python", "-m", "http.server"], check=True)
+    # Start the server
+    server = subprocess.Popen(["python", "-m", "http.server"])
+
+    # Keep the script alive as long as the server is running
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("HTTP server stopped.")
+        server.terminate()
 except subprocess.CalledProcessError as e:
     print(f"Error starting the HTTP server: {e}")
-except KeyboardInterrupt:
-    print("HTTP server stopped.")
 

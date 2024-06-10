@@ -1,84 +1,147 @@
 import json
-from jinja2 import Template
 import os
+import urllib.parse
 
-# Load matches from the JSON file
-with open('matches.json', 'r') as f:
-    matches = json.load(f)
+results_file = 'traversal_results.json'
 
-# Load dangling_audio from the JSON file, create an empty list if the file does not exist
-try:
-    with open('dangling_audio.json', 'r') as f:
-        dangling_audio = json.load(f)
-except FileNotFoundError:
-    dangling_audio = []
+# Load the recordings folders from a JSON file
+with open(results_file, 'r') as f:
+    data = json.load(f)
+    audio_files = data['audio_files']
+    transcript_files = data['transcript_files']
 
-# Load dangling_transcripts from the JSON file, create an empty list if the file does not exist
-try:
-    with open('dangling_transcripts.json', 'r') as f:
-        dangling_transcripts = json.load(f)
-except FileNotFoundError:
-    dangling_transcripts = []
+# Sort and pair the files
+audio_dict = {}
+transcript_dict = {}
 
-template = Template("""
-Title: Audio Recordings Timeline
-Date: {{ date }}
-Category: Recordings
-Tags: audio, transcripts
-Slug: audio-recordings-timeline
-Author: Your Name
-Summary: A timeline of audio recordings and transcripts.
+for audio in audio_files:
+    base = os.path.splitext(os.path.basename(audio))[0]
+    audio_dict[base] = audio
 
+for transcript in transcript_files:
+    base = os.path.splitext(os.path.basename(transcript))[0]
+    transcript_dict[base] = transcript
+
+matches = []
+dangling_audio = []
+dangling_transcripts = []
+
+for base in audio_dict.keys():
+    if base in transcript_dict:
+        matches.append((audio_dict[base], transcript_dict[base]))
+    else:
+        dangling_audio.append(audio_dict[base])
+
+for base in transcript_dict.keys():
+    if base not in audio_dict:
+        dangling_transcripts.append(transcript_dict[base])
+
+# Function to read file with fallback encoding
+def read_file_with_fallback(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except UnicodeDecodeError:
+        with open(file_path, 'r', encoding='iso-8859-1') as f:
+            return f.read()
+
+# Create symbolic links directory if not exists
+symlink_dir = "output/symlinks"
+os.makedirs(symlink_dir, exist_ok=True)
+
+# Generate HTML content
+html_content = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Audio Recordings Timeline</title>
-    <style>
-        /* Add your CSS here */
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h1>Audio Recordings Timeline</h1>
-    <div id="timeline">
-        {% for audio, transcript in matches %}
-            <div class="recording" data-audio="{{ audio }}" data-transcript="{{ transcript }}">
-                {{ audio }}
+    <header>
+        <h1>Audio Recordings Timeline</h1>
+    </header>
+    <main>
+        <section id="timeline">
+            <h2>Timeline</h2>
+            <div class="timeline-container">
+"""
+
+for match in matches:
+    audio_file = match[0]
+    transcript_file = match[1]
+
+    # Create symbolic links
+    audio_symlink = os.path.join(symlink_dir, os.path.basename(audio_file))
+    transcript_symlink = os.path.join(symlink_dir, os.path.basename(transcript_file))
+
+    if not os.path.exists(audio_symlink):
+        os.symlink(audio_file, audio_symlink)
+    if not os.path.exists(transcript_symlink):
+        os.symlink(transcript_file, transcript_symlink)
+
+    # URL-encode the paths for HTML
+    encoded_audio_symlink = urllib.parse.quote(os.path.basename(audio_symlink))
+    encoded_transcript_symlink = urllib.parse.quote(os.path.basename(transcript_symlink))
+    transcript_content = read_file_with_fallback(transcript_symlink)
+
+    html_content += f"""
+                <div class="timeline-item" data-audio="symlinks/{encoded_audio_symlink}" data-transcript="symlinks/{encoded_transcript_symlink}">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <audio controls src="symlinks/{encoded_audio_symlink}"></audio>
+                        <pre>{transcript_content}</pre>
+                    </div>
+                </div>
+    """
+
+html_content += """
             </div>
-        {% endfor %}
-    </div>
-    <h2>Dangling Files</h2>
-    <h3>Audio without Transcripts</h3>
-    <ul>
-        {% for audio in dangling_audio %}
-            <li>{{ audio }}</li>
-        {% endfor %}
-    </ul>
-    <h3>Transcripts without Audio</h3>
-    <ul>
-        {% for transcript in dangling_transcripts %}
-            <li>{{ transcript }}</li>
-        {% endfor %}
-    </ul>
-    <script>
-        /* Add your JavaScript here */
-    </script>
+        </section>
+        <section id="dangling-files">
+            <h2>Dangling Files</h2>
+            <div>
+                <h3>Audio without Transcripts</h3>
+                <ul>
+"""
+
+for audio in dangling_audio:
+    audio_symlink = os.path.join(symlink_dir, os.path.basename(audio))
+    if not os.path.exists(audio_symlink):
+        os.symlink(audio, audio_symlink)
+    encoded_audio_symlink = urllib.parse.quote(os.path.basename(audio_symlink))
+    html_content += f"<li>symlinks/{encoded_audio_symlink}</li>"
+
+html_content += """
+                </ul>
+            </div>
+            <div>
+                <h3>Transcripts without Audio</h3>
+                <ul>
+"""
+
+for transcript in dangling_transcripts:
+    transcript_symlink = os.path.join(symlink_dir, os.path.basename(transcript))
+    if not os.path.exists(transcript_symlink):
+        os.symlink(transcript, transcript_symlink)
+    encoded_transcript_symlink = urllib.parse.quote(os.path.basename(transcript_symlink))
+    html_content += f"<li>symlinks/{encoded_transcript_symlink}</li>"
+
+html_content += """
+                </ul>
+            </div>
+        </section>
+    </main>
+    <script src="scripts.js"></script>
 </body>
 </html>
-""")
+"""
 
-output = template.render(
-    date="2024-06-07T14:00:00",  # Use the current date or a dynamic date if needed
-    matches=matches,
-    dangling_audio=dangling_audio,
-    dangling_transcripts=dangling_transcripts
-)
+# Write the HTML content to a file
+with open("content/timeline.html", "w") as f:
+    f.write(html_content)
 
-# Ensure the content directory exists
-os.makedirs('content', exist_ok=True)
-
-with open('content/timeline.html', 'w') as f:
-    f.write(output)
-
-print("Generated content written to content/timeline.html")
+print("HTML content generated successfully.")
 
