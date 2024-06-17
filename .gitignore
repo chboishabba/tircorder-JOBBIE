@@ -1,6 +1,10 @@
 # Ignore all .json files
 *.json
 
+__pycache__/*.*
+__pycache__/
+
+
 # Ignore all j_servski-11-05-24-* except j_servski-11-05-24-10.py
 j_servski-11-05-24-10_*
 j_servski-11-05-24-1.py

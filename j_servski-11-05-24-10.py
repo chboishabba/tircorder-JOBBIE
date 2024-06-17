@@ -25,7 +25,7 @@ warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using F
 
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 # Keep track of proc_comp_timestamps_transcribe
 proc_comp_timestamps_transcribe = []
 
@@ -79,22 +79,12 @@ transcription_complete = Event() # Event to manage synchronization between trans
 # Load the model once and keep it in memory
 model = whisper.load_model("medium.en", device="cpu")
 
-def get_sorted_files(directory):
-    files = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.wav')]
-    files.sort(key=lambda x: os.path.basename(x), reverse=True)
-    return files
-
-
 def valid_filename(file):
     try:
         datetime.strptime(file, '%Y-%m-%d_%H-%M-%S')
         return True
     except ValueError:
         return False
-
-def check_for_subtitle(prefix):
-    extensions = ['.vtt', '.srt', '.txt', '.json']
-    return any(os.path.exists(prefix + ext) for ext in extensions)
 
 def transcribe_audio(file_path):
     try:
@@ -105,119 +95,97 @@ def transcribe_audio(file_path):
         logging.info("Transcription completed successfully.")
         return result.text
     except AssertionError as e:
-        filename = os.path.basename(file_path)
-        logging.error(f"Error in transcribing audio {filename}: {e}")
-        skip_files.add(filename)
+        logging.error(f"Error in transcribing audio {os.path.basename(file_path)}: {e}")
         return None
     except Exception as e:
-        filename = os.path.basename(file_path)
-        logging.error(f"Unhandled error in transcribing audio {filename}: {e}")
-        skip_files.add(filename)
+        logging.error(f"Unhandled error in transcribing audio {os.path.basename(file_path)}: {e}")
         return None
 
-def load_traversal_results(json_path):
+def load_json(file_path):
     try:
-        with open(json_path, 'r') as f:
-            data = json.load(f)
-        return data
+        with open(file_path, 'r') as f:
+            return json.load(f)
     except FileNotFoundError:
-        logging.error(f"Traversal results file not found: {json_path}")
-        return {'audio_files': [], 'transcript_files': []}
+        logging.error(f"{file_path} not found.")
+        return None
     except Exception as e:
-        logging.error(f"Failed to load traversal results: {e}")
-        return {'audio_files': [], 'transcript_files': []}
+        logging.error(f"Failed to load {file_path}: {e}")
+        return None
 
-def scanner(directory, known_files, currently_processing, file_groups, traversal_results):
+def load_state_from_disk():
+    return load_json('state_backup.json')
+
+def load_traversal_results():
+    return load_json('Pelican/traversal_results.json')
+
+def scanner(directory, known_files, traversal_results):
     audio_extensions = ['.wav', '.flac']
     subtitle_extensions = ['.vtt', '.srt', '.txt', '.json']
+
     while True:
         try:
             current_files = set(os.listdir(directory))
             new_files = list(current_files - known_files)
             new_files.sort(reverse=True)  # Sort files from most recent to oldest
 
-            valid_files = []
             for file in new_files:
                 prefix, extension = os.path.splitext(file)
-                if file not in skip_files:
-                    try:
-                        # Correctly parse datetime
-                        datetime.strptime(prefix, '%Y-%m-%d_%H-%M-%S')
-                        if prefix not in file_groups:
-                            file_groups[prefix] = []
-                        file_groups[prefix].append(extension)
+                if extension in audio_extensions:
+                    if file in traversal_results['audio_files'] or file in traversal_results['transcript_files']:
+                        logging.info(f"Skipping already processed file: {file}")
+                        continue
 
-                        # Check if the file is already processed
-                        if file in traversal_results['audio_files'] or file in traversal_results['transcript_files']:
-                            logging.info(f"Skipping already processed file: {file}")
-                            continue
+                    transcripts_exist = any(os.path.exists(join(directory, prefix + ext)) for ext in subtitle_extensions)
+                    if transcripts_exist:
+                        logging.debug(f"Skipping processing for {file}: transcript file already exists.")
+                        continue
 
-                        if extension in audio_extensions:
-                            # Check for existing transcript files
-                            transcripts_exist = any(os.path.exists(join(directory, prefix + ext)) for ext in subtitle_extensions)
-                            if transcripts_exist:
-                                logging.debug(f"Skipping processing for {file}: transcript file already exists.")
-                                continue
-
-                            if extension == ".wav":
-                                flac_exists = os.path.exists(join(directory, prefix + '.flac'))
-                                if not flac_exists:
-                                    TRANSCRIBE_QUEUE.put(file)
-                                    currently_processing.add(file)
-                                    logging.debug(f"File {file} added to transcription queue")
-                                else:
-                                    logging.info(f"Skipping FLAC conversion for {file}: FLAC file already exists.")
-                            
-                            elif extension == ".flac":
-                                TRANSCRIBE_QUEUE.put(file)
-                                currently_processing.add(file)
-                                logging.debug(f"File {file} added to transcription queue for flac")
-
-                        elif extension in subtitle_extensions:
-                            audio_files_exist = any(os.path.exists(join(directory, prefix + ext)) for ext in audio_extensions)
-                            if not audio_files_exist:
-                                logging.info(f"No corresponding audio file for {file}; skipping.")
-
-                        valid_files.append(file)
-
-                    except ValueError:
-                        logging.error(f"Filename {file} does not match the expected format and will be ignored.")
-                        skip_files.add(file)
-                else:
-                    logging.info(f"File {file} is skipped as it's in the skip list.")
-
-            known_files.update(new_files)
+                    TRANSCRIBE_QUEUE.put(join(directory, file))
+                    logging.debug(f"File {file} added to transcription queue")
+                    
+                known_files.add(file)
 
         except Exception as e:
             logging.error(f"An error occurred in the scanner function: {e}")
         time.sleep(5)
 
-
-
-
 def transcriber():
-    global process_status, proc_comp_timestamps_transcribe
+    global proc_comp_timestamps_transcribe
+
+    state_data = load_state_from_disk()
+    traversal_results = load_traversal_results()
+    if not state_data:
+        state_data = {'known_files': [], 'transcribe_queue': [], 'convert_queue': [], 'skip_files': [], 'skip_reasons': []}
+    if not traversal_results:
+        traversal_results = {'audio_files': [], 'transcript_files': []}
+
+    known_files = set(state_data['known_files'])
+    for item in state_data['transcribe_queue']:
+        TRANSCRIBE_QUEUE.put(item)
+
+    for item in state_data['convert_queue']:
+        CONVERT_QUEUE.put(item)
+
     while True:
         file = TRANSCRIBE_QUEUE.get()
         start_time = datetime.now()
         TRANSCRIBE_ACTIVE.set()
         logging.info(f"SYSTIME: {start_time.strftime('%Y-%m-%d %H:%M:%S')} | Starting transcription for {file}.")
-        
+
+        output_text = None
         if transcription_method == 'python_whisper':
-            output_text, audio_duration = transcribe_audio(file)
+            output_text = transcribe_audio(file)
         elif transcription_method == 'ctranslate2':
-            file_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
-            output_text, audio_duration = transcribe_ct2(file_path)
+            output_text, _ = transcribe_ct2(file)
         elif transcription_method == 'ctranslate2_nonpythonic':
-            file_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
-            output_text, audio_duration = transcribe_ct2_nonpythonic(file_path)
+            output_text, _ = transcribe_ct2_nonpythonic(file)
         else:
             logging.error(f"Unsupported transcription method: {transcription_method}")
             TRANSCRIBE_QUEUE.task_done()
             continue
 
         if output_text is not None:
-            output_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", splitext(file)[0] + '.txt')
+            output_path = splitext(file)[0] + '.txt'
             try:
                 with open(output_path, 'w') as f:
                     f.write(output_text)
@@ -225,39 +193,104 @@ def transcriber():
                 elapsed_time = (end_time - start_time).total_seconds()
                 real_time_factor = audio_duration / elapsed_time if elapsed_time > 0 else 0
                 logging.info(f"SYSTIME: {end_time.strftime('%Y-%m-%d %H:%M:%S')} | Transcription completed and saved for {file}. Real-time factor: {real_time_factor:.2f}x.")
-            except PermissionError as e:
-                logging.error(f"Permission denied while saving transcription for {file}: {e}")
-            except FileNotFoundError as e:
-                logging.error(f"File not found error while saving transcription for {file}: {e}")
             except Exception as e:
-                logging.error(f"An error occurred while saving transcription for {file}: {e}")
+                logging.error(f"Error while saving transcription for {file}: {e}")
         else:
             logging.error(f"Transcription failed for {file}.")
 
         CONVERT_QUEUE.put(file)
-        
-        # Calculate processing rates
+
         now = datetime.now()
         proc_comp_timestamps_transcribe.append(now)
-        
         one_hour_ago = now - timedelta(hours=1)
         one_minute_ago = now - timedelta(minutes=1)
-        
-        # Filter timestamps
+
         proc_comp_timestamps_transcribe = [t for t in proc_comp_timestamps_transcribe if t > one_hour_ago]
         files_per_hour = len([t for t in proc_comp_timestamps_transcribe if t > one_hour_ago])
         files_per_minute = len([t for t in proc_comp_timestamps_transcribe if t > one_minute_ago])
 
         logging.info(f"SYSTIME: {now.strftime('%Y-%m-%d %H:%M:%S')} | File {file} added to conversion queue. {CONVERT_QUEUE.qsize()} files waiting for conversion. {TRANSCRIBE_QUEUE.qsize()} left to transcribe. Processing rates: {files_per_hour} files/hour, {files_per_minute} files/minute.")
-        
+
         TRANSCRIBE_QUEUE.task_done()
         TRANSCRIBE_ACTIVE.clear()
 
         if not TRANSCRIBE_QUEUE.qsize():
-            process_status = 'housekeeping'
             logging.info("All transcription tasks completed, entering housekeeping mode.")
         else:
             logging.info(f"{TRANSCRIBE_QUEUE.qsize()} transcription tasks remaining.")
+
+        transcription_complete.set()
+
+def load_recordings_folders(folders_file_path):
+    try:
+        with open('Pelican/folders_file.json', 'r') as f:
+            data = json.load(f)
+            return data['recordings_folders']
+    except FileNotFoundError:
+        logging.error(f"folders_file.json not found at {folders_file_path}.")
+        return []
+    except json.JSONDecodeError as e:
+        logging.error(f"Error decoding JSON from {folders_file_path}: {e}")
+        return []
+
+def load_state_from_disk():
+    try:
+        with open('state_backup.json', "r") as f:
+            data = json.load(f)
+
+        known_files = set(data["known_files"])
+
+        transcribe_queue = Queue()
+        for item in data["transcribe_queue"]:
+            transcribe_queue.put(item)
+
+        convert_queue = Queue()
+        for item in data["convert_queue"]:
+            convert_queue.put(item)
+
+        skip_files = set(data["skip_files"])
+        skip_reasons = data.get("skip_reasons", [
+            "Error in transcription",
+            "Incorrect audio shape",
+            "File already processed",
+            "Invalid file format",
+            "File ignored by user request",
+            "Other error"
+        ])
+
+        return known_files, transcribe_queue, convert_queue, skip_files, skip_reasons
+    except FileNotFoundError:
+        logging.error("No state file found, initializing with empty structures.")
+        return set(), Queue(), Queue(), set(), [
+            "Error in transcription",
+            "Incorrect audio shape",
+            "File already processed",
+            "Invalid file format",
+            "File ignored by user request",
+            "Other error"
+        ]
+    except Exception as e:
+        logging.error(f"Failed to load state from disk: {e}")
+        return set(), Queue(), Queue(), set(), [
+            "Error in transcription",
+            "Incorrect audio shape",
+            "File already processed",
+            "Invalid file format",
+            "File ignored by user request",
+            "Other error"
+        ]
+
+def load_traversal_results():
+    try:
+        with open('Pelican/traversal_results.json', 'r') as f:
+            data = json.load(f)
+        return data
+    except FileNotFoundError:
+        logging.error(f"Traversal results file not found.")
+        return {'audio_files': [], 'transcript_files': []}
+    except Exception as e:
+        logging.error(f"Failed to load traversal results: {e}")
+        return {'audio_files': [], 'transcript_files': []}
 
 
 
@@ -494,7 +527,7 @@ def main():
     currently_processing = set()
     file_groups = defaultdict(list)
 
-    traversal_results = load_traversal_results('/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/Pelican/traversal_results.json')
+    traversal_results = load_traversal_results()
 
     signal.signal(signal.SIGINT, handle_shutdown_signal)
     signal.signal(signal.SIGTERM, handle_shutdown_signal)
@@ -517,7 +550,7 @@ def main():
     try:
         while True:
             time.sleep(5)
-            logging.debug("Main loop running...")
+            logging.debug(f"Main loop running... Known files: {len(known_files)}")
             logging.debug(f"Transcribing Active: {TRANSCRIBE_ACTIVE.is_set()}")
             logging.debug(f"Transcription Queue Size: {TRANSCRIBE_QUEUE.qsize()}")
             logging.debug(f"Conversion Queue Size: {CONVERT_QUEUE.qsize()}")
