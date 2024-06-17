@@ -11,6 +11,7 @@ transcript_extensions = ['.srt', '.txt', '.vtt', '.json', '.tsv']
 def load_recordings_folders(file):
     with open(file, 'r') as f:
         data = json.load(f)
+        print(f"Loaded recordings folders: {data['recordings_folders']}")  # Debugging print
         return data['recordings_folders']
 
 def get_latest_modification_time(folders):

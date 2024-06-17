@@ -7,7 +7,7 @@ import time
 scripts = [
     "dir_traversal.py",
     "match_audio_transcript.py",
-    "generate_content.py",
+    "generate_html.py",
 ]
 
 # Execute each script in sequence
@@ -24,7 +24,7 @@ timeline_path = os.path.join("content", "timeline.html")
 if os.path.exists(timeline_path):
     print(f"timeline.html found at {timeline_path}")
 else:
-    print("timeline.html not found. Please check generate_content.py for issues.")
+    print("timeline.html not found. Please check generate_html.py for issues.")
     exit(1)
 
 # Run Pelican to generate the site

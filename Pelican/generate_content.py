@@ -1,49 +1,26 @@
 import json
 import os
 import urllib.parse
+from generate_html_timeline_item import generate_html_timeline_item
+from generate_html_dangling_audio import generate_html_dangling_audio
+from generate_html_dangling_transcripts import generate_html_dangling_transcripts
 
-results_file = 'traversal_results.json'
 
-# Load the recordings folders from a JSON file
-with open(results_file, 'r') as f:
-    data = json.load(f)
-    audio_files = data['audio_files']
-    transcript_files = data['transcript_files']
+# Load matches and dangling files
+with open('matches.json', 'r') as f:
+    matches = json.load(f)
 
-# Sort and pair the files
-audio_dict = {}
-transcript_dict = {}
+print("Loaded matches:", matches)  # Debug print
 
-for audio in audio_files:
-    base = os.path.splitext(os.path.basename(audio))[0]
-    audio_dict[base] = audio
+with open('dangling_audio.json', 'r') as f:
+    dangling_audio = json.load(f)
 
-for transcript in transcript_files:
-    base = os.path.splitext(os.path.basename(transcript))[0]
-    transcript_dict[base] = transcript
+print("Loaded dangling audio:", dangling_audio)  # Debug print
 
-matches = []
-dangling_audio = []
-dangling_transcripts = []
+with open('dangling_transcripts.json', 'r') as f:
+    dangling_transcripts = json.load(f)
 
-for base in audio_dict.keys():
-    if base in transcript_dict:
-        matches.append((audio_dict[base], transcript_dict[base]))
-    else:
-        dangling_audio.append(audio_dict[base])
-
-for base in transcript_dict.keys():
-    if base not in audio_dict:
-        dangling_transcripts.append(transcript_dict[base])
-
-# Function to read file with fallback encoding
-def read_file_with_fallback(file_path):
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except UnicodeDecodeError:
-        with open(file_path, 'r', encoding='iso-8859-1') as f:
-            return f.read()
+print("Loaded dangling transcripts:", dangling_transcripts)  # Debug print
 
 # Create symbolic links directory if not exists
 symlink_dir = "output/symlinks"
@@ -58,7 +35,6 @@ html_content = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Audio Recordings Timeline</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="scripts.js" defer></script>
 </head>
 <body>
     <header>
@@ -86,58 +62,23 @@ for match in matches:
     # URL-encode the paths for HTML
     encoded_audio_symlink = urllib.parse.quote(os.path.basename(audio_symlink))
     encoded_transcript_symlink = urllib.parse.quote(os.path.basename(transcript_symlink))
-    transcript_content = read_file_with_fallback(transcript_symlink)
 
-    html_content += f"""
-                <div class="timeline-item" data-audio="symlinks/{encoded_audio_symlink}" data-transcript="symlinks/{encoded_transcript_symlink}">
-                    <div class="timeline-dot"></div>
-                    <div class="timeline-content">
-                        <span class="label">{os.path.basename(audio_file)}</span>
-                        <div class="audio-player" style="display: none;">
-                            <audio controls>
-                                <source data-src="symlinks/{encoded_audio_symlink}" type="audio/wav">
-                            </audio>
-                            <pre>{transcript_content}</pre>
-                        </div>
-                    </div>
-                </div>
-    """
+    html_content += generate_html_timeline_item(encoded_audio_symlink, encoded_transcript_symlink, transcript_symlink)
 
 html_content += """
             </div>
         </section>
         <section id="dangling-files">
             <h2>Dangling Files</h2>
-            <div>
-                <h3>Audio without Transcripts</h3>
-                <ul>
 """
 
-for audio in dangling_audio:
-    audio_symlink = os.path.join(symlink_dir, os.path.basename(audio))
-    if not os.path.exists(audio_symlink):
-        os.symlink(audio, audio_symlink)
-    html_content += f"<li>{os.path.basename(audio)}</li>"
+html_content += generate_html_dangling_audio(dangling_audio, symlink_dir)
+html_content += generate_html_dangling_transcripts(dangling_transcripts, symlink_dir)
 
 html_content += """
-                </ul>
-            </div>
-            <div>
-                <h3>Transcripts without Audio</h3>
-                <ul>
-"""
-
-for transcript in dangling_transcripts:
-    transcript_symlink = os.path.join(symlink_dir, os.path.basename(transcript))
-    if not os.path.exists(transcript_symlink):
-        os.symlink(transcript, transcript_symlink)
-    html_content += f"<li>{os.path.basename(transcript)}</li>"
-
-html_content += """
-                </ul>
-            </div>
         </section>
     </main>
+    <script src="scripts.js"></script>
 </body>
 </html>
 """

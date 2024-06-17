@@ -312,7 +312,7 @@ def transcribe_ct2_old(currently_processing):
         transcribing_active.set()  # Signal that transcribing is active
 
         with transcribing_lock:
-            input_path = join("/mnt/smbshare/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
+            input_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
             output_path = splitext(input_path)[0] + '.txt'
             cmd = ["whisper-ctranslate2", input_path, "--model", "medium.en", "--language", "en", "--output_dir", output_path, "--device", "cpu"]
 
@@ -358,7 +358,7 @@ def transcribe(currently_processing):
         transcribing_active.set()  # Signal that transcribing is active
 
         with transcribing_lock:
-            input_path = join("/mnt/smbshare/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
+            input_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
             if transcription_method == 'python_whisper':
                 output_text = transcribe_audio(input_path)
             else:
@@ -414,7 +414,7 @@ def wav2flac():
 
         with converting_lock:
             process_status = f'converting {file}'
-            input_path = join("/mnt/smbshare/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
+            input_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
             output_path = input_path.replace('.wav', '.flac')
             
             try:
@@ -551,7 +551,7 @@ def main():
     logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s - %(levelname)s - %(message)s')
 
-    directory = "/mnt/smbshare/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/"
+    directory = "/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/"
     currently_processing = set()
     file_groups = defaultdict(list)  # Initialize file_groups
 

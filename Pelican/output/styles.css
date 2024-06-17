@@ -51,7 +51,13 @@ h1, h2, h3 {
     margin-top: 10px;
 }
 
+
 .highlight {
     background-color: yellow;
+}
+
+.highlight-container {
+    margin-top: 10px;
+    font-weight: bold;
 }
 

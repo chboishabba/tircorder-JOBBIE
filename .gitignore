@@ -1,6 +1,20 @@
 # Ignore all .json files
 *.json
 
+# Ignore all j_servski-11-05-24-* except j_servski-11-05-24-10.py
+j_servski-11-05-24-10_*
+j_servski-11-05-24-1.py
+j_servski-11-05-24-2.py
+j_servski-11-05-24-3.py
+j_servski-11-05-24-4.py
+j_servski-11-05-24-5.py
+j_servski-11-05-24-6.py
+j_servski-11-05-24-7.py
+j_servski-11-05-24-8.py
+j_servski-11-05-24-9.py
+j_servski-11-05-24.py
+
+# Ignore specific Pelican files and folders
 Pelican/**/*.json
 Pelican/**/folders_file.json
 Pelican/**/output/**/timeline.html
@@ -9,3 +23,6 @@ Pelican/**/content/**/timeline.html
 Pelican/output/*.*
 Pelican/output/symlinks/*.*
 Pelican/output/_HELP_DELETEME symlinks
+Pelican/__pycache__/*.*
+
+faster-whisper-medium-en/
