@@ -44,6 +44,12 @@ Ensure you have Python 3.8 (tested 3.9.18 arch linux) or higher installed on you
 ```
 python --version
 ```
+
+If you would like to use compute other than CPU you will need to check whether the device is available to PyTorch. This cuda check applies even if your GPU is not nVidia:
+
+```
+python torch.cuda.is_available()
+```
 # Dependencies
 
 TiRCorder requires the command-line tool ffmpeg to be installed on your system, which is available from most package managers:
