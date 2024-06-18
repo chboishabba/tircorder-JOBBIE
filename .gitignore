@@ -30,3 +30,6 @@ Pelican/output/_HELP_DELETEME symlinks
 Pelican/__pycache__/*.*
 
 faster-whisper-medium-en/
+
+state.db
+*journal*

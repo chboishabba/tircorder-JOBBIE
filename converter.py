@@ -1,53 +1,74 @@
-import os
 import logging
-import subprocess
-import time
-from os.path import join
+import os
+import sqlite3
+from datetime import datetime, timedelta
+from queue import Queue
 from state import export_queues_and_files, load_state
+from utils import wav2flac
 
-def wav2flac(CONVERT_QUEUE, converting_lock, transcribing_active, transcription_complete):
+audio_extensions = ['.wav', '.flac', '.mp3', '.ogg', '.amr']
+
+def converter(CONVERT_QUEUE, TRANSCRIBE_ACTIVE):
     known_files, transcribe_queue, convert_queue, skip_files, skip_reasons = load_state()
+    proc_comp_timestamps_convert = []
+
+    def execute_with_retry(query, params=(), retries=5, delay=1):
+        conn = sqlite3.connect('state.db')
+        cursor = conn.cursor()
+        for attempt in range(retries):
+            try:
+                cursor.execute(query, params)
+                conn.commit()
+                return
+            except sqlite3.OperationalError as e:
+                if 'database is locked' in str(e):
+                    logging.warning(f"Database is locked, retrying in {delay} seconds... (attempt {attempt + 1})")
+                    time.sleep(delay)
+                else:
+                    raise
+            finally:
+                conn.close()
+        logging.error(f"Failed to execute query after {retries} attempts: {query}")
+        raise sqlite3.OperationalError("Database is locked and retries exhausted")
 
     while True:
-        transcription_complete.wait()
-        transcription_complete.clear()
-        
-        if CONVERT_QUEUE.qsize() == 0:
-            logging.debug("No conversion tasks in the queue.")
+        known_file_id = CONVERT_QUEUE.get()
+        start_time = datetime.now()
+
+        conn = sqlite3.connect('state.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT k.file_name, r.folder_path FROM known_files k JOIN recordings_folders r ON k.folder_id = r.id WHERE k.id = ?', (known_file_id,))
+        result = cursor.fetchone()
+        conn.close()
+
+        if not result:
+            logging.error(f"File with known_file_id {known_file_id} not found in database.")
             continue
 
-        while not transcribing_active.is_set() and CONVERT_QUEUE.qsize() > 0:
-            file = CONVERT_QUEUE.get()
-            attempts = 0
+        file_name, folder_path = result
+        file = os.path.join(folder_path, file_name)
 
-            while transcribing_active.is_set() and attempts < 5:
-                logging.warning(f"Waiting to convert {file} as transcribing is active. Attempt {attempts+1}/5")
-                time.sleep(10)
-                attempts += 1
+        if not file_name.endswith('.wav'):
+            logging.info(f"Skipping non-WAV file: {file}")
+            CONVERT_QUEUE.task_done()
+            continue
 
-            if attempts == 5:
-                logging.error(f"Conversion skipped for {file} after 5 attempts as transcribing is still active.")
-                CONVERT_QUEUE.put(file)
-                continue
+        logging.info(f"SYSTIME: {start_time.strftime('%Y-%m-%d %H:%M:%S')} | Starting conversion for {file}.")
 
-            with converting_lock:
-                process_status = f'converting {file}'
-                input_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
-                output_path = input_path.replace('.wav', '.flac')
-                
-                try:
-                    result = subprocess.run(["ffmpeg", "-n", "-i", input_path, "-c:a", "flac", output_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    logging.info(f"Conversion completed for {file}.")
-                    if result.stderr:
-                        logging.info(f"ffmpeg output for {file}: {result.stderr.decode()}")
-                except subprocess.CalledProcessError as e:
-                    logging.error(f"Failed to convert {file} to FLAC: {e}")
-                except Exception as e:
-                    logging.error(f"An error occurred while converting {file} to FLAC: {e}")
-
-                CONVERT_QUEUE.task_done()
-                transcription_complete.clear()
-                if not CONVERT_QUEUE.qsize():
-                    process_status = 'housekeeping'
-                    logging.info("All conversion tasks completed, entering housekeeping mode.")
+        output_file = os.path.splitext(file)[0] + '.flac'
+        try:
+            convert_to_flac(file, output_file)
+            end_time = datetime.now()
+            elapsed_time = (end_time - start_time).total_seconds()
+            proc_comp_timestamps_convert.append(datetime.now())
+            logging.info(f"SYSTIME: {end_time.strftime('%Y-%m-%d %H:%M:%S')} | File {file} converted in {elapsed_time:.2f}s.")
+            execute_with_retry('INSERT OR IGNORE INTO audio_files (known_file_id, unix_timestamp) VALUES (?, ?)', (known_file_id, int(os.path.getmtime(output_file))))
+            CONVERT_QUEUE.task_done()
+        except Exception as e:
+            logging.error(f"Error converting file {file}: {e}")
+            skip_files.add(file)
+            skip_reasons[file] = "conversion_failed"
+            execute_with_retry('INSERT OR IGNORE INTO skip_files (known_file_id, reason) VALUES (?, ?)', (known_file_id, "conversion_failed"))
+            CONVERT_QUEUE.task_done()
+            continue
 
