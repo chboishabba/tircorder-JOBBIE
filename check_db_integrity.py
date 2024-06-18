@@ -11,8 +11,12 @@ def check_db_integrity():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Fetch all file names and extensions from known_files
-    cursor.execute('SELECT file_name, extension FROM known_files')
+    # Fetch all file names and extension IDs from known_files
+    cursor.execute('''
+        SELECT k.file_name, e.extension 
+        FROM known_files k 
+        LEFT JOIN extensions e ON k.extension_id = e.id
+    ''')
     all_files = cursor.fetchall()
     
     invalid_files = []
@@ -20,11 +24,11 @@ def check_db_integrity():
     for file in all_files:
         file_name = file[0]
         db_extension = file[1]
-        # Extract the file extension
+        # Extract the actual file extension
         _, ext = os.path.splitext(file_name)
-        ext = ext.lower()
+        ext = ext.lower().strip('.')
         # Check if the extension is not in the valid extensions list or does not match the db extension
-        if ext not in valid_extensions or (db_extension is None or ext != db_extension.lower()):
+        if db_extension is None or ext not in valid_extensions or ext != db_extension.lower():
             invalid_files.append((file_name, db_extension, ext))
 
     conn.close()

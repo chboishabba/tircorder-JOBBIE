@@ -4,9 +4,16 @@ import subprocess
 import logging
 import signal
 import sys
+import warnings
+import threading
 from state import export_queues_and_files, load_state
+from db_worker import clear_tables
 
 DB_PATH = 'state.db'
+warnings.filterwarnings("ignore", message=".*set_audio_backend has been deprecated.*")
+warnings.filterwarnings("ignore", message=".*Model was trained*")
+
+threads = []
 
 def check_and_create_db():
     if not os.path.exists(DB_PATH):
@@ -88,13 +95,23 @@ def prompt_ignore_flags(folders):
 
 def handle_shutdown_signal(signum, frame):
     logging.info("Shutdown signal received. Exporting queues, known files, and skip files...")
-    known_files, transcribe_queue, convert_queue, skip_files, skip_reasons = load_state()
-    export_queues_and_files(known_files, transcribe_queue, convert_queue, skip_files, skip_reasons)
-    logging.info("State of queues, files, and skip reasons has been saved.")
-    sys.exit(0)
+    try:
+        for thread in threads:
+            if isinstance(thread, subprocess.Popen):
+                thread.terminate()
+                thread.wait(timeout=5)
+            else:
+                thread.join(timeout=1)
+        known_files, transcribe_queue, convert_queue, skip_files, skip_reasons = load_state()
+        export_queues_and_files(known_files, transcribe_queue, convert_queue, skip_files, skip_reasons)
+        logging.info("State of queues, files, and skip reasons has been saved.")
+    except Exception as e:
+        logging.error(f"Error exporting state: {e}")
+    finally:
+        sys.exit(0)
 
 def init():
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     
     signal.signal(signal.SIGINT, handle_shutdown_signal)
     signal.signal(signal.SIGTERM, handle_shutdown_signal)
@@ -112,7 +129,10 @@ def init():
         save_folders_to_db(folders)
         prompt_ignore_flags(folders)
 
-    subprocess.run(['python', 'main.py'])
+    known_files, transcribe_queue, convert_queue, skip_files, skip_reasons = load_state()
+    process = subprocess.Popen(['python', 'main.py'])
+    threads.append(process)
+    process.wait()
 
 if __name__ == "__main__":
     init()

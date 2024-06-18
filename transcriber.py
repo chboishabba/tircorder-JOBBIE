@@ -1,108 +1,117 @@
 import logging
 import os
 import sqlite3
-from datetime import datetime, timedelta
-from queue import Queue
+import json
+from datetime import datetime
+from queue import Queue, Empty
 from state import export_queues_and_files, load_state
-from utils import transcribe_audio, transcribe_ct2, transcribe_ct2_nonpythonic
+from utils import transcribe_audio
+from db_worker import DBWorker
+from huggingface_hub import login, whoami
+import sys
+import io
+import concurrent.futures
 
-audio_extensions = ['.wav', '.flac', '.mp3', '.ogg', '.amr']
+audio_extensions = ['wav', 'flac', 'mp3', 'ogg', 'amr']
 
-def transcriber(TRANSCRIBE_QUEUE, CONVERT_QUEUE, transcription_method, TRANSCRIBE_ACTIVE, transcription_complete, model):
-    known_files, transcribe_queue, convert_queue, skip_files, skip_reasons = load_state()
-    proc_comp_timestamps_transcribe = []
+# Suppress stdout and stderr during Hugging Face login
+class SuppressOutput(io.StringIO):
+    def __enter__(self):
+        self._stdout = sys.stdout
+        self._stderr = sys.stderr
+        sys.stdout = self
+        sys.stderr = self
+        return self
+    def __exit__(self, *args):
+        sys.stdout = self._stdout
+        sys.stderr = self._stderr
 
-    def execute_with_retry(query, params=(), retries=5, delay=1):
-        conn = sqlite3.connect('state.db')
-        cursor = conn.cursor()
-        for attempt in range(retries):
-            try:
-                cursor.execute(query, params)
-                conn.commit()
-                return
-            except sqlite3.OperationalError as e:
-                if 'database is locked' in str(e):
-                    logging.warning(f"Database is locked, retrying in {delay} seconds... (attempt {attempt + 1})")
-                    time.sleep(delay)
-                else:
-                    raise
-            finally:
-                conn.close()
-        logging.error(f"Failed to execute query after {retries} attempts: {query}")
-        raise sqlite3.OperationalError("Database is locked and retries exhausted")
+# Read the Hugging Face token from a file
+with open('hf-token.txt', 'r') as file:
+    HFTOKEN = file.read().strip()
+
+# Log in to the Hugging Face hub
+with SuppressOutput():
+    login(token=HFTOKEN)
+
+def transcriber(transcribe_queue, convert_queue, transcription_method, transcribe_active, transcription_complete, db_worker, device="cuda", compute_type="float16", hf_token=HFTOKEN):
+    known_files, _, _, skip_files, skip_reasons = load_state()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+    futures = []
 
     while True:
-        known_file_id = TRANSCRIBE_QUEUE.get()
-        start_time = datetime.now()
-        TRANSCRIBE_ACTIVE.set()
+        try:
+            known_file_id = transcribe_queue.get(timeout=5)  # Add a timeout to exit gracefully
+        except Empty:
+            break  # Exit the loop if the queue is empty for a while
 
-        conn = sqlite3.connect('state.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT k.file_name, r.folder_path FROM known_files k JOIN recordings_folders r ON k.folder_id = r.id WHERE k.id = ?', (known_file_id,))
-        result = cursor.fetchone()
-        conn.close()
+        start_time = datetime.now()
+        transcribe_active.set()
+
+        result_queue = Queue()
+        query = '''
+            SELECT k.file_name, r.folder_path, e.extension 
+            FROM known_files k 
+            JOIN recordings_folders r ON k.folder_id = r.id 
+            JOIN extensions e ON k.extension_id = e.id 
+            WHERE k.id = ?
+        '''
+        db_worker.fetch_all(query, (known_file_id,), result_queue)
+        result = result_queue.get()
 
         if not result:
             logging.error(f"File with known_file_id {known_file_id} not found in database.")
+            transcribe_queue.task_done()
             continue
 
-        file_name, folder_path = result
-        file = os.path.join(folder_path, file_name)
+        file_name, folder_path, extension = result[0]
+        file = os.path.join(folder_path, f"{file_name}.{extension}")
 
-        if not file_name.endswith(tuple(audio_extensions)):
+        if extension not in audio_extensions:
             logging.info(f"Skipping non-audio file: {file}")
-            TRANSCRIBE_QUEUE.task_done()
+            transcribe_queue.task_done()
             continue
 
         logging.info(f"SYSTIME: {start_time.strftime('%Y-%m-%d %H:%M:%S')} | Starting transcription for {file}.")
 
-        output_text = None
-        audio_duration = 0
-
-        if transcription_method == 'python_whisper':
-            output_text = transcribe_audio(file)
-        elif transcription_method == 'ctranslate2':
-            output_text, audio_duration = transcribe_ct2(file, model, skip_files)
-        elif transcription_method == 'ctranslate2_nonpythonic':
-            output_text, audio_duration = transcribe_ct2_nonpythonic(file)
-        else:
-            logging.error(f"Unsupported transcription method: {transcription_method}")
-            TRANSCRIBE_QUEUE.task_done()
+        try:
+            future = executor.submit(transcribe_audio, file, device=device, compute_type=compute_type, batch_size=16, hf_token=hf_token)
+            futures.append((future, known_file_id, file, start_time))
+        except RuntimeError as e:
+            logging.error(f"Runtime error in transcribing audio {file_name}: {e}")
+            transcribe_queue.task_done()
             continue
 
-        logging.info(f"Processing audio with duration {audio_duration:.3f}s")
-
-        if output_text is not None:
-            output_path = os.path.splitext(file)[0] + '.txt'
-            try:
-                with open(output_path, 'w') as f:
-                    f.write(output_text)
+    # Ensure all futures complete before shutting down
+    for future, known_file_id, file, start_time in futures:
+        try:
+            transcript_json = future.result()
+            if transcript_json is not None:
+                output_base = os.path.splitext(file)[0]
+                output_text_path = output_base + '.txt'
+                output_json_path = output_base + '.json'
+                with open(output_text_path, 'w') as f:
+                    f.write(transcript_json['text'])
+                with open(output_json_path, 'w') as f:
+                    json.dump(transcript_json, f)
                 end_time = datetime.now()
                 elapsed_time = (end_time - start_time).total_seconds()
-                real_time_factor = audio_duration / elapsed_time if elapsed_time > 0 else 0
-                proc_comp_timestamps_transcribe.append(datetime.now())
-                logging.info(f"SYSTIME: {end_time.strftime('%Y-%m-%d %H:%M:%S')} | File {file} transcribed in {elapsed_time:.2f}s (x{real_time_factor:.2f}).")
-                TRANSCRIBE_QUEUE.task_done()
-            except Exception as e:
-                logging.error(f"Error writing transcription output for {file}: {e}")
-                skip_files.add(file)
-                skip_reasons[file] = "transcription_output_error"
-                execute_with_retry('INSERT OR IGNORE INTO skip_files (known_file_id, reason) VALUES (?, ?)', (known_file_id, "transcription_output_error"))
-                TRANSCRIBE_QUEUE.task_done()
-                continue
-        else:
-            logging.error(f"Transcription failed for {file}.")
-            skip_files.add(file)
-            skip_reasons[file] = "transcription_failed"
-            execute_with_retry('INSERT OR IGNORE INTO skip_files (known_file_id, reason) VALUES (?, ?)', (known_file_id, "transcription_failed"))
-            TRANSCRIBE_QUEUE.task_done()
-            continue
+                logging.info(f"SYSTIME: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | File {file} transcribed in {elapsed_time:.2f}s.")
 
-        logging.info(f"SYSTIME: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | File {file} added to conversion queue. {CONVERT_QUEUE.qsize() + 1} files waiting for conversion. {TRANSCRIBE_QUEUE.qsize()} left to transcribe. Processing rates: {len(proc_comp_timestamps_transcribe) / (timedelta(seconds=len(proc_comp_timestamps_transcribe)).total_seconds() / 60):.2f} files/hour, {len(proc_comp_timestamps_transcribe) / (timedelta(seconds=len(proc_comp_timestamps_transcribe)).total_seconds() / 60):.2f} files/minute.")
-        execute_with_retry('INSERT INTO convert_queue (known_file_id) VALUES (?)', (known_file_id,))
-        CONVERT_QUEUE.put(known_file_id)
-        if TRANSCRIBE_QUEUE.qsize() == 0:
-            logging.info("All transcription tasks completed, entering housekeeping mode.")
-            transcription_complete.set()
-            TRANSCRIBE_ACTIVE.clear()
+                if extension in audio_extensions:
+                    convert_queue.put(known_file_id)  # Only add audio files to convert_queue
+            else:
+                logging.error(f"Transcription failed for {file}.")
+                skip_files.add(file)
+                skip_reasons[file] = "transcription_failed"
+        except Exception as e:
+            logging.error(f"Error writing transcription output for {file}: {e}")
+            skip_files.add(file)
+            skip_reasons[file] = "transcription_output_error"
+        finally:
+            transcribe_queue.task_done()
+
+    executor.shutdown(wait=True)
+    transcribe_active.clear()
+    transcription_complete.set()
 

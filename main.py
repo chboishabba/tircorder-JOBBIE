@@ -1,111 +1,79 @@
-import threading
-import logging
+import os
 import signal
-import time
+import logging
 import sys
 import threading
-from threading import Event, Lock
+import time
 from queue import Queue
+from db_worker import DBWorker
 from scanner import scanner
 from transcriber import transcriber
-from converter import wav2flac
+from converter import converter
 from state import export_queues_and_files, load_state
-from utils import load_recordings_folders_from_db, wav2flac
-import db_match_audio_transcript
-import whisper
-from faster_whisper import WhisperModel
-from rate_limit import RateLimiter
-from multiprocessing import Value, Manager
 
-# Import the new match_audio_transcripts function
-from db_match_audio_transcript import match_audio_transcripts
-
-# Globals
-model = WhisperModel("medium.en", device="cpu", compute_type="int8")
-TRANSCRIBE_QUEUE = Queue()
-CONVERT_QUEUE = Queue()
-known_files, skip_files, skip_reasons = set(), set(), {}
-
-# Load recordings folders from the database
-recordings_folders = load_recordings_folders_from_db()
-
-TRANSCRIBE_ACTIVE = threading.Event()
-transcribing_lock = threading.Lock()
+# Global variables
+transcribe_queue = Queue()
+convert_queue = Queue()
+skip_files = set()
+skip_reasons = {}
+known_files = set()
+transcribe_active = threading.Event()
 transcription_complete = threading.Event()
-checked_files = set()
+db_worker = DBWorker()
 
 def handle_shutdown_signal(signum, frame):
     logging.info("Shutdown signal received. Exporting queues, known files, and skip files...")
-    export_queues_and_files(known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, skip_files, skip_reasons)
-    sys.exit(0)
+    try:
+        # Wait for threads to complete their current task
+        transcribe_active.wait(timeout=10)
+        transcription_complete.wait(timeout=10)
 
-signal.signal(signal.SIGINT, handle_shutdown_signal)
-signal.signal(signal.SIGTERM, handle_shutdown_signal)
+        # Save the state with increased timeout
+        export_queues_and_files(known_files, transcribe_queue, convert_queue, skip_files, skip_reasons)
+        logging.info("State of queues, files, and skip reasons has been saved.")
+    except Exception as e:
+        logging.error(f"Error exporting state: {e}")
+    finally:
+        db_worker.stop()
+        db_worker.join()
+        sys.exit(0)
 
 def main():
-    global TRANSCRIBE_QUEUE, CONVERT_QUEUE, known_files, checked_files, skip_files, skip_reasons
-    global transcribing_active, transcription_complete, process_status, recordings_folders, converting_lock
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s',
-                        handlers=[logging.StreamHandler()])
+    # Setup signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, handle_shutdown_signal)
+    signal.signal(signal.SIGTERM, handle_shutdown_signal)
 
-    logging.info("Main function started")
-    
-    try:
-        known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, skip_files, skip_reasons = load_state()
-    except Exception as e:
-        logging.error(f"Error loading state: {e}")
-        known_files, skip_files, skip_reasons = set(), set(), {}
-        TRANSCRIBE_QUEUE = Queue()
-        CONVERT_QUEUE = Queue()
+    # Start the DB worker
+    db_worker.start()
 
-    # Initialize shared variables
-    manager = Manager()
-    process_status = manager.Value('s', '')
-    converting_lock = Lock()
-    transcribing_active = Event()
-    transcription_complete = Event()
-    
-    # Load recordings folders from the database
-    recordings_folders = load_recordings_folders_from_db()
+    # Load the state
+    known_files, transcribe_queue, convert_queue, skip_files, skip_reasons = load_state()
 
+    # Start scanner thread
     logging.info("Starting scanner thread...")
-    scanner_thread = threading.Thread(target=scanner, args=(known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, checked_files, skip_files, skip_reasons))
-    scanner_thread.daemon = True
+    scanner_thread = threading.Thread(target=scanner, args=(known_files, transcribe_queue, convert_queue, skip_files, skip_reasons, db_worker))
     scanner_thread.start()
 
-    logging.info("Starting transcribe thread...")
-    transcribe_thread = threading.Thread(target=transcriber, args=(TRANSCRIBE_QUEUE, CONVERT_QUEUE, 'ctranslate2', transcribing_active, transcription_complete, model))
-    transcribe_thread.daemon = True
-    transcribe_thread.start()
+    # Start transcriber thread
+    logging.info("Starting transcriber thread...")
+    transcriber_thread = threading.Thread(target=transcriber, args=(transcribe_queue, convert_queue, 'whisperx', transcribe_active, transcription_complete, db_worker))
+    transcriber_thread.start()
 
-    logging.info("Starting convert thread...")
-    convert_thread = threading.Thread(target=wav2flac, args=(CONVERT_QUEUE, converting_lock, transcribing_active, transcription_complete, process_status, recordings_folders))
-    convert_thread.daemon = True
-    convert_thread.start()
+    # Start converter thread
+    logging.info("Starting converter thread...")
+    converter_thread = threading.Thread(target=converter, args=(convert_queue, db_worker))
+    converter_thread.start()
 
+    # Main loop
+    logging.info("Main loop running...")
     try:
         while True:
-            time.sleep(5)
-            logging.info(f"Main loop running... Known files: {len(known_files)}")
-            logging.info(f"Transcribing Active: {transcribing_active.is_set()}")
-            logging.info(f"Transcription Queue Size: {TRANSCRIBE_QUEUE.qsize()}")
-            logging.info(f"Conversion Queue Size: {CONVERT_QUEUE.qsize()}")
-
-            if TRANSCRIBE_QUEUE.qsize() == 0 and not transcribing_active.is_set():
-                logging.info("No transcription tasks running, ensuring conversion tasks are processed.")
-                transcription_complete.set()
-                try:
-                    logging.debug(f"Ran match_audio_transcripts()")
-                    match_audio_transcripts()  # Match audio and transcripts and update the database
-                except Exception as e:
-                    logging.error(f"Error in match_audio_transcripts: {e}")
-
+            time.sleep(1)
     except KeyboardInterrupt:
-        logging.info("Shutting down...")
+        handle_shutdown_signal(None, None)
 
 if __name__ == "__main__":
     main()
-
 

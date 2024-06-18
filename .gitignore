@@ -33,3 +33,5 @@ faster-whisper-medium-en/
 
 state.db
 *journal*
+hf-token.txt
+state.pkl

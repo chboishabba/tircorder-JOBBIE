@@ -1,14 +1,42 @@
 import os
 import json
-import librosa
 import logging
 import subprocess
-import time
 import sqlite3
+import torch
+import torchaudio
+import hashlib
 from queue import Queue
-from threading import Event, Lock
-from os.path import join
 from datetime import datetime
+from pyannote.audio import Pipeline
+from pyannote.core import Annotation
+import whisperx
+from huggingface_hub import login, whoami
+import warnings
+from rate_limit import RateLimiter
+
+warnings.filterwarnings("ignore", message=".*set_audio_backend has been deprecated.*")
+warnings.filterwarnings("ignore", message=".*Model was trained*")
+
+USE_CPU = False
+
+# Read the Hugging Face token from a file
+with open('hf-token.txt', 'r') as file:
+    HFTOKEN = file.read().strip()
+
+# Log in to the Hugging Face hub
+login(token=HFTOKEN)
+
+def calculate_file_hash(file_path):
+    """Calculate the SHA-256 hash of a file."""
+    sha256_hash = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+    except FileNotFoundError:
+        return None
+    return sha256_hash.hexdigest()
 
 def load_recordings_folders_from_db(db_path='state.db'):
     conn = sqlite3.connect(db_path)
@@ -18,186 +46,113 @@ def load_recordings_folders_from_db(db_path='state.db'):
     conn.close()
     return folders
 
+def get_all_files(folders, extensions):
+    files = []
+    for folder_id, folder, ignore_transcribing, ignore_converting in folders:
+        if os.path.exists(folder):
+            for root, _, file_names in os.walk(folder):
+                for file_name in file_names:
+                    if any(file_name.lower().endswith(ext) for ext in extensions):
+                        files.append((folder_id, os.path.join(root, file_name)))
+    return files
 
-def wav2flac(CONVERT_QUEUE, converting_lock, transcribing_active, transcription_complete, process_status, recordings_folders):
-    def get_file_paths(file):
-        for folder_id, directory, ignore_transcribing, ignore_converting in recordings_folders:
-            input_path = join(directory, file)
-            if os.path.exists(input_path):
-                output_path = input_path.replace('.wav', '.flac')
-                return input_path, output_path
-        return None, None
-
-    while True:
-        transcription_complete.wait()
-        file = CONVERT_QUEUE.get()
-        attempts = 0
-
-        while transcribing_active.is_set() and attempts < 5:
-            logging.warning(f"Waiting to convert {file} as transcribing is active. Attempt {attempts+1}/5")
-            time.sleep(10)
-            attempts += 1
-
-        if attempts == 5:
-            logging.error(f"Conversion skipped for {file} after 5 attempts as transcribing is still active.")
-            CONVERT_QUEUE.put(file)
-            continue
-
-        with converting_lock:
-            process_status.value = f'converting {file}'
-            input_path, output_path = get_file_paths(file)
-            
-            if not input_path or not output_path:
-                logging.error(f"File paths not found for {file}. Skipping conversion.")
-                CONVERT_QUEUE.task_done()
-                continue
-
-            try:
-                result = subprocess.run(["ffmpeg", "-i", input_path, "-c:a", "flac", output_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                logging.info(f"Conversion completed for {file}.")
-                if result.stderr:
-                    logging.error(f"Conversion errors for {file}: {result.stderr.decode()}")
-            except subprocess.CalledProcessError as e:
-                logging.error(f"Failed to convert {file} to FLAC: {e}")
-            except Exception as e:
-                logging.error(f"An error occurred while converting {file} to FLAC: {e}")
-
-            CONVERT_QUEUE.task_done()
-            transcription_complete.clear()
-            if not CONVERT_QUEUE.qsize():
-                process_status.value = 'housekeeping'
-                logging.info("All conversion tasks completed, entering housekeeping mode.")
-
-def transcribe_audio(file_path):
+def wav2flac(input_path, output_path):
     try:
-        audio = whisper.load_audio(file_path)
-        mel = whisper.log_mel_spectrogram(audio).to(model.device)
-        options = whisper.DecodingOptions()
-        result = model.decode(mel, options)
+        result = subprocess.run(["ffmpeg", "-i", input_path, "-c:a", "flac", output_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.stderr:
+            logging.error(f"Conversion errors for {input_path}: {result.stderr.decode()}")
+        logging.info(f"Conversion completed for {input_path}.")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Failed to convert {input_path} to FLAC: {e}")
+    except Exception as e:
+        logging.error(f"An error occurred while converting {input_path} to FLAC: {e}")
+
+def transcribe_audio(file_path, device="cuda", compute_type="float16", batch_size=16, hf_token=HFTOKEN):
+    global USE_CPU
+
+    def assign_word_speakers(diarize_segments, result):
+        for segment in result.get('segments', []):
+            for word in segment.get('words', []):
+                word['speaker'] = "unknown"
+                for diarize_segment in diarize_segments:
+                    if diarize_segment['start'] <= word['start'] <= diarize_segment['end']:
+                        word['speaker'] = diarize_segment['label']
+        return result
+
+    def perform_transcription(device, compute_type, model_name):
+        model = whisperx.load_model(model_name, device, compute_type=compute_type)
+        audio = whisperx.load_audio(file_path)
+        result = model.transcribe(audio, batch_size=batch_size)
+        logging.debug(f"{result}")
         logging.info("Transcription completed successfully.")
-        return result.text
+        
+        # Align whisper output
+        model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
+        result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
+
+        # Convert audio to the required format for diarization
+        waveform, sample_rate = torchaudio.load(file_path)
+        waveform = waveform.to(device)
+        logging.debug(f"Waveform shape: {waveform.shape}, Sample rate: {sample_rate}")
+
+        # Diarize and assign speaker labels
+        try:
+            pipeline = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-3.0",
+                use_auth_token=HFTOKEN
+            )
+            pipeline.to(torch.device("cuda") if not USE_CPU else torch.device("cpu"))
+            diarization = pipeline({"waveform": waveform, "sample_rate": sample_rate})
+            diarize_segments = [
+                {"start": segment.start, "end": segment.end, "label": label}
+                for segment, label in diarization.itertracks(yield_label=True)
+            ]
+            result = assign_word_speakers(diarize_segments, result)
+        except Exception as e:
+            logging.error(f"Failed to load diarization model: {e}")
+            diarize_segments = []
+            result = assign_word_speakers(diarize_segments, result)
+
+        # Include word-level confidence in JSON
+        word_confidence = [{"word": segment.get('text', ''), "confidence": segment.get('confidence', 1.0)} for segment in result.get('segments', [])]
+        transcript_json = {
+            "text": result.get('text', ''),
+            "segments": result.get('segments', []),
+            "word_confidence": word_confidence,
+            "diarization": diarize_segments
+        }
+
+        # Log the transcript
+        logging.info(f"Transcript for {file_path}: {transcript_json['text']}")
+
+        return transcript_json
+
+    try:
+        if USE_CPU or not torch.cuda.is_available() or device != "cuda":
+            device = "cpu"
+            compute_type = "int8"
+            model_name = "medium.en"
+            USE_CPU = True  # Ensure we stick to CPU once set
+        else:
+            model_name = "large-v2"
+        
+        return perform_transcription(device, compute_type, model_name)
+        
+    except RuntimeError as e:
+        if "CUDA driver version is insufficient for CUDA runtime version" in str(e):
+            logging.warning("CUDA error encountered. Switching to CPU.")
+            device = "cpu"
+            compute_type = "int8"
+            model_name = "medium.en"
+            USE_CPU = True  # Ensure we stick to CPU once set
+            return perform_transcription(device, compute_type, model_name)
+        else:
+            logging.error(f"Runtime error in transcribing audio {os.path.basename(file_path)}: {e}")
+            return None
     except AssertionError as e:
-        logging.error(f"Error in transcribing audio {os.path.basename(file_path)}: {e}")
+        logging.error(f"Assertion error in transcribing audio {os.path.basename(file_path)}: {e}")
         return None
     except Exception as e:
         logging.error(f"Unhandled error in transcribing audio {os.path.basename(file_path)}: {e}")
         return None
 
-def load_json(file_path):
-    try:
-        with open(file_path, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        logging.error(f"{file_path} not found.")
-        return None
-    except Exception as e:
-        logging.error(f"Failed to load {file_path}: {e}")
-        return None
-
-def load_state_from_disk():
-    return load_json('state_backup.json')
-
-def load_traversal_results():
-    return load_json('Pelican/traversal_results.json')
-
-def transcribe_ct2(file_path, model, skip_files):
-    try:
-        # Load and preprocess the audio
-        audio, _ = librosa.load(file_path, sr=16000, mono=True)
-
-        # Transcribe audio using the model
-        segments, info = model.transcribe(file_path, beam_size=5)
-
-        logging.debug(f"Transcription result type: {type(segments)}")
-        logging.debug(f"Transcription result: {segments}")
-
-        transcription = "\n".join([segment.text for segment in segments])
-        language = info.language
-        total_audio_duration = info.duration
-
-        logging.info(f"Detected language {language}")
-        logging.info("Transcription completed successfully.")
-        
-        detailed_transcription = ""
-        for segment in segments:
-            start = segment.start
-            end = segment.end
-            detailed_transcription += f"[{start:.2f}s -> {end:.2f}s] {segment.text}\n"
-        det_trans_stripped = detailed_transcription.strip()
-        logging.info(det_trans_stripped)
-
-        return det_trans_stripped, total_audio_duration
-    except ValueError as e:
-        logging.error(f"ValueError: {e}")
-        filename = os.path.basename(file_path)
-        skip_files.add(filename)
-        return None, 0
-    except AssertionError as e:
-        filename = os.path.basename(file_path)
-        logging.error(f"Error in transcribing audio {filename}: {e}")
-        skip_files.add(filename)
-        return None, 0
-    except FileNotFoundError as e:
-        filename = os.path.basename(file_path)
-        logging.error(f"File not found error while transcribing {file_path}: {e}")
-        skip_files.add(filename)
-        return None, 0
-    except PermissionError as e:
-        filename = os.path.basename(file_path)
-        logging.error(f"Permission denied while transcribing {file_path}: {e}")
-        skip_files.add(filename)
-        return None, 0
-    except Exception as e:
-        filename = os.path.basename(file_path)
-        logging.error(f"An error occurred while transcribing {file_path}: {e}")
-        skip_files.add(filename)
-        return None, 0
-
-
-
-def transcribe_ct2_nonpythonic(input_path):
-    output_dir = os.path.dirname(input_path)
-    cmd = [
-        "whisper-ctranslate2",
-        input_path,  # No need to quote within the list
-        "--model", "medium.en",
-        "--language", "en",
-        "--output_dir", output_dir,  # No need to quote within the list
-        "--device", "cpu"
-    ]
-
-    try:
-        output_text = []
-        start_time = None
-        end_time = None
-        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
-            for line in proc.stdout:
-                if "Processing audio" in line:
-                    # Extract segment times from the line
-                    parts = line.split()
-                    start_time = float(parts[3].replace('s', ''))
-                    end_time = float(parts[5].replace('s', ''))
-                output_text.append(line)
-                logging.info(line.strip())  # Log the progressive output
-            for err_line in proc.stderr:
-                logging.error(f"Transcription errors: {err_line.strip()}")
-
-        proc.wait()
-        if proc.returncode != 0:
-            raise subprocess.CalledProcessError(proc.returncode, cmd)
-
-        total_audio_duration = end_time - start_time if start_time and end_time else 0
-        return ''.join(output_text), total_audio_duration
-
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to transcribe {input_path}: {e}")
-        return None, 0
-    except FileNotFoundError as e:
-        logging.error(f"File not found error while transcribing {input_path}: {e}")
-        return None, 0
-    except PermissionError as e:
-        logging.error(f"Permission denied while transcribing {input_path}: {e}")
-        return None, 0
-    except Exception as e:
-        logging.error(f"An error occurred while transcribing {input_path}: {e}")
-        return None, 0
