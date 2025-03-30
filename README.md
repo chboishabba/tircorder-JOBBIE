@@ -79,7 +79,7 @@ pip install setuptools-rust
 Clone the repository to your local machine:
 
 ```
-git clone https://github.com/yourusername/tircorder.git
+git clone https://github.com/chboishabba/tircorder.git
 cd tircorder
 python tircorder.py
 ```
