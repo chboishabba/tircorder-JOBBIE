@@ -85,7 +85,7 @@ python tircorder.py
 ```
 
 
-##Usage
+## Usage
 
 To start the voice-activated recorder, navigate to the cloned directory and run:
 
