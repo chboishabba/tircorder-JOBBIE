@@ -26,7 +26,7 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 - **Speaker Diarization**
 - **Word-level Transcripts**
 - **Word-level Confidence Scores**
-- **User-friendly Web Interface**
+- **User-friendly Web Interface --  currently Gradio for API/GUI access, more to come soon**
 - **Streamlined Setup Process**
 
 ## Features
