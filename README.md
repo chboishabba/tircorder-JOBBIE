@@ -1,6 +1,8 @@
 # TiRCorder: Part of the ITIR Suite
 
 
+Massive thank you to https://github.com/lamikr/rocm_sdk_builder, https://github.com/xuhuisheng/rocm-gfx803, and https://github.com/robertrosenbusch/gfx803_rocm for enabling development of this suite.
+
 TiRCorder is an integral component of the Intergenerational Trauma-Informed Identity Rebuilder (ITIR) toolset. This multifaceted suite is designed to tackle complex challenges in data management, security, and user interaction, with a special focus on addressing the needs of those dealing with intergenerational trauma. Licensed under the Mozilla Public License, ITIR embodies a commitment to open, secure, and ethical technology development.
 
 
