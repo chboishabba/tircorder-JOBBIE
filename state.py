@@ -1,6 +1,7 @@
 import sqlite3
 import logging
 from queue import Queue
+from os.path import join
 
 DB_PATH = 'state.db'
 
@@ -33,8 +34,13 @@ def load_state():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    cursor.execute('SELECT id, file_name, folder_id FROM known_files')
-    known_files = {row[0] for row in cursor.fetchall()}
+    cursor.execute(
+        'SELECT k.id, k.file_name, k.folder_id, r.folder_path '
+        'FROM known_files k JOIN recordings_folders r ON k.folder_id = r.id'
+    )
+    known_files = {
+        (row[2], join(row[3], row[1])) for row in cursor.fetchall()
+    }
 
     cursor.execute('SELECT known_file_id FROM transcribe_queue')
     transcribe_queue = Queue()
