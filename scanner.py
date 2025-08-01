@@ -97,7 +97,13 @@ def scanner(known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, checked_files, skip_fi
                             'SELECT id FROM known_files WHERE file_name = ? AND folder_id = ?',
                             (basename, folder_id)
                         )
-                        known_file_id = cursor.fetchone()[0]
+                        row = cursor.fetchone()
+                        if row is None:
+                            logging.error(f"Failed to retrieve known_file_id for {file}")
+                            checked_files.add(file)
+                            known_files.add((folder_id, file))
+                            continue
+                        known_file_id = row[0]
 
                         if extension in audio_extensions:
                             transcripts_exist = any(
@@ -107,6 +113,11 @@ def scanner(known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, checked_files, skip_fi
                             if transcripts_exist:
                                 logging.debug(f"Skipping transcription on {file}: Reason 1 - Transcript file already exists.")
                                 checked_files.add(file)
+                                known_files.add((folder_id, file))
+                                cursor.execute(
+                                    'INSERT OR IGNORE INTO audio_files (known_file_id, unix_timestamp) VALUES (?, ?)',
+                                    (known_file_id, int(os.path.getmtime(file)))
+                                )
                                 continue
 
                             if not ignore_transcribing:
