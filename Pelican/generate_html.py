@@ -2,7 +2,6 @@ import os
 import json
 from generate_html_header import generate_html_header
 from generate_html_footer import generate_html_footer
-from read_file_with_fallback import read_file_with_fallback
 from generate_html_matches import generate_html_matches
 from generate_html_dangling_audio import generate_html_dangling_audio
 from generate_html_dangling_transcripts import generate_html_dangling_transcripts
@@ -52,8 +51,10 @@ html_content = generate_html_header()
 # Generate HTML for matches
 html_content += generate_html_matches(matches, symlink_dir)
 
-# Generate HTML for dangling audio and transcripts
+# Close the timeline section and open dangling section
 html_content += """
+            </div>
+        </section>
         <section id="dangling-files">
             <h2>Dangling Files</h2>
             <div>
