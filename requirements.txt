@@ -25,3 +25,4 @@ piecash
 plotly
 
 networkx
+nltk
