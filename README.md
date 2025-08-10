@@ -38,6 +38,10 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 - **Resource Efficient**: Optimizes CPU and memory usage by offloading processing, to ensure minimal impact on user system performance.
 - **Adaptive Recording**: **COMING SOON** Changes recording intervals based on detected activity to save storage and processing power.
 - **Separated concerns**: Manage transcription on an external machine, ensuring the client can get on with things. 
+- **Calendar view**: Visualize engagement per day with colours scaled to the relative number of entries. Day view breaks time into minute- or second-level bars that can be coloured by usage frequency or source app.
+- **Hourly cache**: Bins events per hour to speed up calendar colouring on large datasets.
+- **Rate-controlled query queue**: Serialises operations and enforces a minimum delay between them to avoid overwhelming services.
+- **CPU-aware throttling**: Monitors processor load and delays queued operations when usage gets too high.
 
 
 ## Installation

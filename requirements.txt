@@ -16,3 +16,4 @@ ctranslate2
 faster_whisper
 librosa
 warnings
+psutil
