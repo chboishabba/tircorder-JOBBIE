@@ -34,7 +34,10 @@ File matching & web output
 db_match_audio_transcript.py records which audio files have transcripts, and the Pelican scripts (e.g., generate_html.py) produce HTML pages summarizing matches and “dangling” files
 
 Example client
-jobbie_client_dual-capture.py demonstrates capturing microphone and system audio simultaneously, using WebRTC VAD to detect speech and trigger pauses
+jobbie_client_dual-capture.py demonstrates capturing microphone and system audio simultaneously, using WebRTC VAD to detect speech and trigger pauses in recording or to assist in noise removal, as well as recording of, for example, psychologist meetings etc.
+
+
+
 Key Concepts to Understand
 
     Queue-based pipeline – Scanner → Transcriber → Converter all communicate through Python Queue objects.
