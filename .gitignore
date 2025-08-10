@@ -1,5 +1,9 @@
 # Ignore all .json files
 *.json
+# Allow committed data sources
+!matches.json
+!dangling_audio.json
+!dangling_transcripts.json
 
 __pycache__/*.*
 __pycache__/
@@ -35,4 +39,6 @@ state.db
 *journal*
 .venv/
 .pytest_cache/
+
 hourly_cache.sqlite
+

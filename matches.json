@@ -1,0 +1,4 @@
+[
+  ["audio/sample1.mp3", "transcripts/sample1.txt", "phone", "Alice"],
+  ["audio/sample2.mp3", "transcripts/sample2.txt", "email", "Bob"]
+]
