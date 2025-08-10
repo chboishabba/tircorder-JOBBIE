@@ -2,6 +2,11 @@ from datetime import datetime, date
 
 from calendar_utils import get_relative_counts, build_day_segments
 
+from datetime import datetime, date, timedelta
+
+from calendar_utils import get_relative_counts, build_day_segments
+from hourly_cache import HourlyEventCache
+
 
 def make_dt(y, m, d, h=0):
     return datetime(y, m, d, h)
@@ -54,3 +59,19 @@ def test_build_day_segments_by_app():
     assert counts["sms"][1] == 1
     assert counts["sms"][2] == 1
     assert counts["email"][1] == 1
+
+
+
+def test_hourly_cache_counts_and_use_in_relative_counts():
+    cache = HourlyEventCache(":memory:")
+    base = datetime(2024, 5, 6, 0, 0)
+    timestamps = [base + timedelta(minutes=i) for i in range(120)]
+    cache.bulk_record(timestamps)
+
+    day_counts = cache.day_counts(date(2024, 5, 6), date(2024, 5, 6))
+    assert day_counts[date(2024, 5, 6)] == 120
+
+    intensities = get_relative_counts(
+        [], view="week", reference_date=date(2024, 5, 6), cache=cache, threshold=10
+    )
+    assert intensities[date(2024, 5, 6)] == 1.0

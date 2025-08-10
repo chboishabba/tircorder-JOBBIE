@@ -13,6 +13,17 @@ def _get_date_range(view: str, reference_date: date):
     reference_date: datetime.date
         The anchor date for the view.
     """
+
+from typing import Optional
+
+try:  # optional dependency
+    from hourly_cache import HourlyEventCache  # type: ignore
+except Exception:  # pragma: no cover - cache optional
+    HourlyEventCache = None  # type: ignore
+
+
+def _get_date_range(view: str, reference_date: date):
+    """Return the inclusive date range for a given view."""
     if view == "day":
         start = reference_date
         end = reference_date
@@ -64,6 +75,33 @@ def get_relative_counts(entries, view: str = "week", reference_date: date | None
         start + timedelta(days=i): counts.get(start + timedelta(days=i), 0)
         for i in range(num_days)
     }
+
+def get_relative_counts(
+    entries=None,
+    view: str = "week",
+    reference_date: Optional[date] = None,
+    cache: Optional["HourlyEventCache"] = None,
+    threshold: int = 100,
+):
+    """Compute relative intensity per day for the selected view."""
+    if reference_date is None:
+        reference_date = date.today()
+
+    start, end = _get_date_range(view, reference_date)
+
+    entries = list(entries or [])
+    use_cache = cache is not None and (not entries or len(entries) > threshold)
+
+    if use_cache:
+        day_counts = cache.day_counts(start, end)
+    else:
+        counts = Counter(dt.date() for dt in entries)
+        num_days = (end - start).days + 1
+        day_counts = {
+            start + timedelta(days=i): counts.get(start + timedelta(days=i), 0)
+            for i in range(num_days)
+        }
+
     max_count = max(day_counts.values()) if day_counts else 0
     intensities = {
         day: (count / max_count if max_count else 0)
@@ -101,6 +139,8 @@ def build_day_segments(
         list corresponds to the number of steps (1440 for minutes or 86400 for
         seconds).
     """
+
+    """Return per-time-step counts for a specific day."""
 
     if resolution == "second":
         step_seconds = 1

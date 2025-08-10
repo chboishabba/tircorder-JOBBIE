@@ -3,8 +3,8 @@ import os
 import sqlite3
 from datetime import datetime, timedelta
 from queue import Queue
-from state import export_queues_and_files, load_state
-from utils import wav2flac
+from .state import export_queues_and_files, load_state
+from .utils import wav2flac
 
 audio_extensions = ['.wav', '.flac', '.mp3', '.ogg', '.amr']
 

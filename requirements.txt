@@ -16,3 +16,10 @@ ctranslate2
 faster_whisper
 librosa
 warnings
+vaderSentiment
+requests
+ofxparse
+qifparse
+
+piecash
+networkx
