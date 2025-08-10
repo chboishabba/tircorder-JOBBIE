@@ -49,6 +49,8 @@ html_content = """
 for match in matches:
     audio_file = match[0]
     transcript_file = match[1]
+    platform = match[2]
+    contact = match[3]
 
     # Create symbolic links
     audio_symlink = os.path.join(symlink_dir, os.path.basename(audio_file))
@@ -63,7 +65,13 @@ for match in matches:
     encoded_audio_symlink = urllib.parse.quote(os.path.basename(audio_symlink))
     encoded_transcript_symlink = urllib.parse.quote(os.path.basename(transcript_symlink))
 
-    html_content += generate_html_timeline_item(encoded_audio_symlink, encoded_transcript_symlink, transcript_symlink)
+    html_content += generate_html_timeline_item(
+        encoded_audio_symlink,
+        encoded_transcript_symlink,
+        transcript_symlink,
+        platform,
+        contact,
+    )
 
 html_content += """
             </div>
@@ -79,6 +87,7 @@ html_content += """
         </section>
     </main>
     <script src="scripts.js"></script>
+    <script src="timeline3d.js"></script>
 </body>
 </html>
 """
