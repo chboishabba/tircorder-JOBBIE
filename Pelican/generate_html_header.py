@@ -10,10 +10,11 @@ def generate_html_header():
         <script src="scripts.js" defer></script>
     </head>
     <body>
+        <a href="#main-content" class="skip-link">Skip to main content</a>
         <header>
             <h1>Audio Recordings Timeline</h1>
         </header>
-        <main>
+        <main id="main-content" role="main">
             <section id="timeline">
                 <h2>Timeline</h2>
                 <div class="timeline-container">
