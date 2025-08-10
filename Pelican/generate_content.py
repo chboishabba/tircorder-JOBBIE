@@ -2,6 +2,11 @@
 
 import json
 import os
+import urllib.parse
+from datetime import datetime
+
+from contact_frequency_cache import ContactFrequencyCache
+
 
 from generate_html_timeline_item import generate_html_timeline_item
 from generate_html_dangling_audio import generate_html_dangling_audio
@@ -13,17 +18,17 @@ from transcript_frequency import calculate_noun_frequency
 with open("matches.json", "r") as f:
     matches = json.load(f)
 
-print("Loaded matches:", matches)  # Debug print
+cache = ContactFrequencyCache()
 
 with open("dangling_audio.json", "r") as f:
     dangling_audio = json.load(f)
 
+
 print("Loaded dangling audio:", dangling_audio)  # Debug print
+
 
 with open("dangling_transcripts.json", "r") as f:
     dangling_transcripts = json.load(f)
-
-print("Loaded dangling transcripts:", dangling_transcripts)  # Debug print
 
 # Create symbolic links directory if not exists
 symlink_dir = "output/symlinks"
@@ -55,6 +60,9 @@ for match in matches:
     platform = match[2]
     contact = match[3]
 
+    timestamp = datetime.fromtimestamp(os.path.getmtime(audio_file))
+    cache.record(contact, timestamp)
+
     # Create symbolic links
     audio_symlink = os.path.join(symlink_dir, os.path.basename(audio_file))
     transcript_symlink = os.path.join(symlink_dir, os.path.basename(transcript_file))
@@ -63,6 +71,12 @@ for match in matches:
         os.symlink(audio_file, audio_symlink)
     if not os.path.exists(transcript_symlink):
         os.symlink(transcript_file, transcript_symlink)
+
+    # URL-encode the paths for HTML
+    encoded_audio_symlink = urllib.parse.quote(os.path.basename(audio_symlink))
+    encoded_transcript_symlink = urllib.parse.quote(
+        os.path.basename(transcript_symlink)
+    )
 
     # Determine a frequency metric using noun detection for the transcript
     frequency = calculate_noun_frequency(transcript_file)
@@ -76,6 +90,10 @@ for match in matches:
         frequency,
     )
 
+frequency_ranking = [
+    {"contact": contact, "count": count} for contact, count in cache.frequency_ranking()
+]
+
 html_content += """
             </div>
         </section>
@@ -86,14 +104,19 @@ html_content += """
 html_content += generate_html_dangling_audio(dangling_audio, symlink_dir)
 html_content += generate_html_dangling_transcripts(dangling_transcripts, symlink_dir)
 
-html_content += """
+html_content += (
+    """
         </section>
     </main>
+    <script>window.contactFrequencies = """
+    + json.dumps(frequency_ranking)
+    + """;</script>
     <script src="scripts.js"></script>
     <script src="timeline3d.js"></script>
 </body>
 </html>
 """
+)
 
 # Write the HTML content to a file
 with open("content/timeline.html", "w") as f:
