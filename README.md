@@ -49,9 +49,11 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 
 - **Separated concerns**: Manage transcription on an external machine, ensuring the client can get on with things. 
 - **Calendar view**: Visualize engagement per day with colours scaled to the relative number of entries. Day view breaks time into minute- or second-level bars that can be coloured by usage frequency or source app.
+=======
  - **Efficient cacheing**: Numerous optimisations to reduce needless recomputation of frequently used values.
 - **Separated concerns**: Manage transcription on an external machine, ensuring the client can get on with things.
 - **Update Tracking**: See [Updates.md](Updates.md) for a history of changes.
+
 
 
 
