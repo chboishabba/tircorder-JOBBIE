@@ -28,6 +28,7 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 - **Word-level Confidence Scores**
 - **User-friendly Web Interface --  currently Gradio for API/GUI access, more to come soon**
 - **Streamlined Setup Process -- there are some issues supporting GPGPU on older cards. At time of first commit, AMD GPGPU was not supported on windows, though there appears to be progress being made via WSL.**
+- **Sentiment & Timeline Views -- prototype module for word-level sentiment and time-based aggregation with hooks for external activity sources (YouTube, Google Docs, chat logs, Zapier).**
 
 - A note on development, [AMD has deprecated support for General Purpose compute on older cards such as Polaris (RX580)](https://github.com/lamikr/rocm_sdk_builder/issues/173#issuecomment-2555741882). The community [has been working to restore these features](https://github.com/xuhuisheng/rocm-gfx803). Due to develpment and personal constraints, progress on this project was limited [until recently, with sincere thank yous to those involved in the efforts](https://github.com/robertrosenbusch/gfx803_rocm). As of June 2025, progress may ideally resume!
 
