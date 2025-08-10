@@ -129,6 +129,14 @@ Contributions to the TiRCORDER project are welcome. Please fork the repository, 
 
 See [3D Timeline Axis Priorities](docs/3d_timeline.md) for axis priorities, accessibility, and fallback guidance.
 
+## Accessibility
+
+The generated web interface uses semantic HTML and provides transcripts for audio clips,
+but it currently lacks ARIA roles, skip-navigation links, and other enhancements that
+improve screen‑reader and keyboard support. We document implemented accessibility tools
+and a TODO roadmap in [accessibility.md](accessibility.md) and welcome community
+feedback as we work toward WCAG 2.1 AA compliance.
+
 ## License
 
 ITIR and TiRCorder are products of TFYQA.biz provided under [Mozilla Public License - MPL 2.0](https://www.mozilla.org/en-US/MPL/). 
