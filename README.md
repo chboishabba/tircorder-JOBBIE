@@ -49,9 +49,11 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 
 - **Separated concerns**: Manage transcription on an external machine, ensuring the client can get on with things. 
 - **Calendar view**: Visualize engagement per day with colours scaled to the relative number of entries. Day view breaks time into minute- or second-level bars that can be coloured by usage frequency or source app.
+=======
  - **Efficient cacheing**: Numerous optimisations to reduce needless recomputation of frequently used values.
 - **Separated concerns**: Manage transcription on an external machine, ensuring the client can get on with things.
 - **Update Tracking**: See [Updates.md](Updates.md) for a history of changes.
+
 
 
 
@@ -128,6 +130,14 @@ Contributions to the TiRCORDER project are welcome. Please fork the repository, 
 ## Documentation
 
 See [3D Timeline Axis Priorities](docs/3d_timeline.md) for axis priorities, accessibility, and fallback guidance.
+
+## Accessibility
+
+The generated web interface uses semantic HTML and provides transcripts for audio clips,
+but it currently lacks ARIA roles, skip-navigation links, and other enhancements that
+improve screen‑reader and keyboard support. We document implemented accessibility tools
+and a TODO roadmap in [accessibility.md](accessibility.md) and welcome community
+feedback as we work toward WCAG 2.1 AA compliance.
 
 ## License
 

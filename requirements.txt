@@ -23,3 +23,5 @@ qifparse
 
 piecash
 plotly
+
+networkx
