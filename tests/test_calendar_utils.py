@@ -1,3 +1,7 @@
+from datetime import datetime, date
+
+from calendar_utils import get_relative_counts, build_day_segments
+
 from datetime import datetime, date, timedelta
 
 from calendar_utils import get_relative_counts, build_day_segments
@@ -55,6 +59,7 @@ def test_build_day_segments_by_app():
     assert counts["sms"][1] == 1
     assert counts["sms"][2] == 1
     assert counts["email"][1] == 1
+
 
 
 def test_hourly_cache_counts_and_use_in_relative_counts():

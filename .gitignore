@@ -39,4 +39,6 @@ state.db
 *journal*
 .venv/
 .pytest_cache/
+
 hourly_cache.sqlite
+

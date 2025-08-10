@@ -21,6 +21,15 @@ h1, h2, h3 {
     border-left: 3px solid #333;
 }
 
+.timeline-3d-container {
+    perspective: 800px;
+    transform-style: preserve-3d;
+}
+
+.timeline-3d-container .timeline-item {
+    transform-style: preserve-3d;
+}
+
 .timeline-item {
     position: relative;
     margin: 10px 0;
