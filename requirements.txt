@@ -20,3 +20,5 @@ vaderSentiment
 requests
 ofxparse
 qifparse
+
+piecash
