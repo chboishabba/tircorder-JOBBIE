@@ -4,7 +4,8 @@
 Massive thank you to [lamikr](https://github.com/lamikr/rocm_sdk_builder), [xuhuisheng](https://github.com/xuhuisheng/rocm-gfx803), and [robertrosenbusch](https://github.com/robertrosenbusch/gfx803_rocm) for enabling development of this suite and providing incredible work for the sake of the public good.
 
 TiRCorder is an integral component of the Intergenerational Trauma-Informed Identity Rebuilder (ITIR) toolset. This multifaceted suite is designed to tackle complex challenges in data management, security, and user interaction, with a special focus on addressing the needs of those dealing with intergenerational trauma. Licensed under the Mozilla Public License, ITIR embodies a commitment to open, secure, and ethical technology development.
-
+It is currently being transitioned from its most primitive CLI form towards a GUI for use by non-technical stakeholders.
+The CLI, as well as an API are intended to be maintained into the future, however the intended audience for this product is generally users with a low-to-nill-degree of technical familiarity.
 
 The BETA TiRCORDER Voice-Activated Recorder (codename 'jobbie') is a component of the larger ITIR project, which aims to provide a comprehensive suite of tools for recording and analyzing various forms of data. This specific component focuses on intelligently managing audio recordings through voice activation, ensuring efficient data capture and storage. More details about the larger project can be found at [TFYQA.biz](https://TFYQA.biz). If you found this tool useful, [buy us a coffee](https://www.paypal.com/paypalme/JohnABrown)!
 
@@ -45,8 +46,13 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 - **Activity-Based Recording Management**: Adjustable recording sensitivity based on user activity.
 - **Resource Efficient**: Optimizes CPU and memory usage by offloading processing, to ensure minimal impact on user system performance.
 - **Adaptive Recording**: **COMING SOON** Changes recording intervals based on detected activity to save storage and processing power.
+
+- **Separated concerns**: Manage transcription on an external machine, ensuring the client can get on with things. 
+- **Calendar view**: Visualize engagement per day with colours scaled to the relative number of entries. Day view breaks time into minute- or second-level bars that can be coloured by usage frequency or source app.
+ - **Efficient cacheing**: Numerous optimisations to reduce needless recomputation of frequently used values.
 - **Separated concerns**: Manage transcription on an external machine, ensuring the client can get on with things.
 - **Update Tracking**: See [Updates.md](Updates.md) for a history of changes.
+
 
 
 ## Installation
