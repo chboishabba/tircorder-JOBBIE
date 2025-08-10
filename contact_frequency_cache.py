@@ -1,3 +1,7 @@
+from collections import defaultdict
+from datetime import datetime, date
+from typing import Dict
+
 """Helpers for counting contact occurrences across days."""
 
 from collections import defaultdict
@@ -8,12 +12,16 @@ class ContactFrequencyCache:
     """Cache counting contact occurrences by day."""
 
     def __init__(self) -> None:
+        self._data: Dict[str, Dict[date, int]] = defaultdict(lambda: defaultdict(int))
+
         self._data: dict[str, dict[date, int]] = defaultdict(lambda: defaultdict(int))
 
     def record(self, contact: str, ts: datetime) -> None:
         """Record a contact occurrence for the given timestamp."""
         day = ts.date()
         self._data[contact][day] += 1
+
+    def daily_counts(self) -> Dict[str, Dict[date, int]]:
 
     def daily_counts(self) -> dict[str, dict[date, int]]:
         """Return a mapping of contacts to their per-day counts."""
@@ -23,6 +31,7 @@ class ContactFrequencyCache:
         """Return contacts sorted by total frequency descending."""
         totals = {c: sum(days.values()) for c, days in self._data.items()}
         return sorted(totals.items(), key=lambda item: item[1], reverse=True)
+
 
 import sqlite3
 from datetime import date, datetime, timedelta
