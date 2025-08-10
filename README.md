@@ -28,6 +28,11 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 - **Word-level Confidence Scores**
 - **User-friendly Web Interface --  currently Gradio for API/GUI access, more to come soon**
 - **Streamlined Setup Process -- there are some issues supporting GPGPU on older cards. At time of first commit, AMD GPGPU was not supported on windows, though there appears to be progress being made via WSL.**
+- Calendar view for timeline
+- Discussions on data safety
+- Discussions on product use within industry
+- Proposed financial structure/ethical alignment
+- Proposed mechanisms for ensuring effective product delivery
 
 - A note on development, [AMD has deprecated support for General Purpose compute on older cards such as Polaris (RX580)](https://github.com/lamikr/rocm_sdk_builder/issues/173#issuecomment-2555741882). The community [has been working to restore these features](https://github.com/xuhuisheng/rocm-gfx803). Due to develpment and personal constraints, progress on this project was limited [until recently, with sincere thank yous to those involved in the efforts](https://github.com/robertrosenbusch/gfx803_rocm). As of June 2025, progress may ideally resume!
 
@@ -37,7 +42,8 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 - **Activity-Based Recording Management**: Adjustable recording sensitivity based on user activity.
 - **Resource Efficient**: Optimizes CPU and memory usage by offloading processing, to ensure minimal impact on user system performance.
 - **Adaptive Recording**: **COMING SOON** Changes recording intervals based on detected activity to save storage and processing power.
-- **Separated concerns**: Manage transcription on an external machine, ensuring the client can get on with things. 
+- **Separated concerns**: Manage transcription on an external machine, ensuring the client can get on with things.
+- **Update Tracking**: See [Updates.md](Updates.md) for a history of changes.
 
 
 ## Installation
