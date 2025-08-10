@@ -1,31 +1,40 @@
+"""Build the timeline HTML page."""
+
 import json
 import os
 import urllib.parse
 from datetime import datetime
 
 from contact_frequency_cache import ContactFrequencyCache
+
+
+
 from generate_html_timeline_item import generate_html_timeline_item
 from generate_html_dangling_audio import generate_html_dangling_audio
 from generate_html_dangling_transcripts import generate_html_dangling_transcripts
+from transcript_frequency import calculate_noun_frequency
 
 
 # Load matches and dangling files
 with open("matches.json", "r") as f:
     matches = json.load(f)
 
-print("Loaded matches:", matches)  # Debug print
+cache = ContactFrequencyCache()
 
 cache = ContactFrequencyCache()
 
+
 with open("dangling_audio.json", "r") as f:
     dangling_audio = json.load(f)
+
 
 print("Loaded dangling audio:", dangling_audio)  # Debug print
 
 with open("dangling_transcripts.json", "r") as f:
     dangling_transcripts = json.load(f)
 
-print("Loaded dangling transcripts:", dangling_transcripts)  # Debug print
+with open("dangling_transcripts.json", "r") as f:
+    dangling_transcripts = json.load(f)
 
 # Create symbolic links directory if not exists
 symlink_dir = "output/symlinks"
@@ -75,12 +84,17 @@ for match in matches:
         os.path.basename(transcript_symlink)
     )
 
+
+    # Determine a frequency metric using noun detection for the transcript
+    frequency = calculate_noun_frequency(transcript_file)
+
     html_content += generate_html_timeline_item(
-        encoded_audio_symlink,
-        encoded_transcript_symlink,
+        os.path.basename(audio_symlink),
+        os.path.basename(transcript_symlink),
         transcript_symlink,
         platform,
         contact,
+        frequency,
     )
 
 daily_counts = cache.daily_counts()
@@ -88,6 +102,10 @@ frequency_ranking = [
     {"contact": c, "count": sum(days.values())} for c, days in daily_counts.items()
 ]
 frequency_ranking.sort(key=lambda x: x["count"], reverse=True)
+
+frequency_ranking = [
+    {"contact": contact, "count": count} for contact, count in cache.frequency_ranking()
+]
 
 html_content += """
             </div>

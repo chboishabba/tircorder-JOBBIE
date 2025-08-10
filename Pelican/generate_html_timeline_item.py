@@ -1,35 +1,62 @@
-import os
+"""Helpers for building timeline HTML blocks."""
+
+from __future__ import annotations
+
 import urllib.parse
-from read_file_with_fallback import read_file_with_fallback
+
+from .read_file_with_fallback import read_file_with_fallback
 
 
 def generate_html_timeline_item(
-    encoded_audio_symlink, encoded_transcript_symlink, transcript_symlink
+    audio_symlink: str,
+    transcript_symlink: str,
+    transcript_path: str,
+    platform: str,
+    contact: str,
+    frequency: int | float | None = None,
+) -> str:
+    """Return an HTML snippet for a single timeline item.
 
-def generate_html_timeline_item(
-    encoded_audio_symlink,
-    encoded_transcript_symlink,
-    transcript_symlink,
-    platform,
-    contact,
-):
-    transcript_content = read_file_with_fallback(transcript_symlink)
+    Parameters
+    ----------
+    audio_symlink:
+        Filename of the audio symlink relative to the ``symlinks`` directory.
+    transcript_symlink:
+        Filename of the transcript symlink relative to the ``symlinks`` directory.
+    transcript_path:
+        Path to the transcript file used for the ``pre`` tag contents.
+    platform:
+        Name of the platform the recording originated from.
+    contact:
+        Name of the contact associated with the recording.
+    frequency:
+        Optional frequency value to emit as a ``data-frequency`` attribute.
 
-    # Use urllib.parse.quote to ensure proper encoding
-    encoded_audio_symlink = urllib.parse.quote(encoded_audio_symlink)
-    encoded_transcript_symlink = urllib.parse.quote(encoded_transcript_symlink)
-
-    return f"""
-        <div class="timeline-item" role="listitem">
-
-        <div class="timeline-item" data-platform="{platform}" data-contact="{contact}">
-            <a href="#" class="label" data-audio="symlinks/{encoded_audio_symlink}" data-transcript="symlinks/{encoded_transcript_symlink}">{encoded_audio_symlink}</a>
-            <div class="audio-player" style="display: none;">
-                <audio controls>
-                    <source data-src="symlinks/{encoded_audio_symlink}" type="audio/mpeg">
-                </audio>
-                <pre>{transcript_content}</pre>
-                <div class="highlight-container"></div>
-            </div>
-        </div>
+    Returns
+    -------
+    str
+        A block of HTML representing the timeline item.
     """
+
+    transcript_content = read_file_with_fallback(transcript_path)
+
+    # Ensure proper URL encoding for use in HTML attributes
+    encoded_audio = urllib.parse.quote(audio_symlink)
+    encoded_transcript = urllib.parse.quote(transcript_symlink)
+
+    freq_attr = f' data-frequency="{frequency}"' if frequency is not None else ""
+
+    return (
+        f'<div class="timeline-item" role="listitem" '
+        f'data-platform="{platform}" data-contact="{contact}"{freq_attr}>'
+        f'<a href="#" class="label" data-audio="symlinks/{encoded_audio}" '
+        f'data-transcript="symlinks/{encoded_transcript}">{encoded_audio}</a>'
+        '<div class="audio-player" style="display: none;">'
+        "<audio controls>"
+        f'<source data-src="symlinks/{encoded_audio}" type="audio/mpeg">'
+        "</audio>"
+        f"<pre>{transcript_content}</pre>"
+        '<div class="highlight-container"></div>'
+        "</div>"
+        "</div>"
+    )
