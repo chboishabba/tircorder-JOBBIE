@@ -110,6 +110,10 @@ Modify the config.py file to adjust the sensitivity settings and other preferenc
 Contributing
 
 Contributions to the TiRCORDER project are welcome. Please fork the repository, make your changes, and submit a pull request for review.
+## Documentation
+
+See [3D Timeline Axis Priorities](docs/3d_timeline.md) for axis priorities, accessibility, and fallback guidance.
+
 ## License
 
 ITIR and TiRCorder are products of TFYQA.biz provided under [Mozilla Public License - MPL 2.0](https://www.mozilla.org/en-US/MPL/). 
