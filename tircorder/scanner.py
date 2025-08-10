@@ -4,8 +4,8 @@ import logging
 import sqlite3
 from queue import Queue
 from os.path import join
-from state import export_queues_and_files, load_state
-from rate_limit import RateLimiter
+from .state import export_queues_and_files, load_state
+from .rate_limit import RateLimiter
 
 def scanner(known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, checked_files, skip_files, skip_reasons):
     def load_recordings_folders_from_db():
@@ -87,32 +87,62 @@ def scanner(known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, checked_files, skip_fi
                             continue
 
                         prefix, extension = os.path.splitext(file)
+
+                        basename = os.path.basename(file)
+                        cursor.execute(
+                            'INSERT OR IGNORE INTO known_files (file_name, folder_id, extension) VALUES (?, ?, ?)',
+                            (basename, folder_id, extension)
+                        )
+                        cursor.execute(
+                            'SELECT id FROM known_files WHERE file_name = ? AND folder_id = ?',
+                            (basename, folder_id)
+                        )
+                        row = cursor.fetchone()
+                        if row is None:
+                            logging.error(f"Failed to retrieve known_file_id for {file}")
+                            checked_files.add(file)
+                            known_files.add((folder_id, file))
+                            continue
+                        known_file_id = row[0]
+
                         if extension in audio_extensions:
-                            transcripts_exist = any(os.path.exists(join(os.path.dirname(file), prefix + ext)) for ext in transcript_extensions)
+                            transcripts_exist = any(
+                                os.path.exists(join(os.path.dirname(file), prefix + ext))
+                                for ext in transcript_extensions
+                            )
                             if transcripts_exist:
                                 logging.debug(f"Skipping transcription on {file}: Reason 1 - Transcript file already exists.")
                                 checked_files.add(file)
+                                known_files.add((folder_id, file))
+                                cursor.execute(
+                                    'INSERT OR IGNORE INTO audio_files (known_file_id, unix_timestamp) VALUES (?, ?)',
+                                    (known_file_id, int(os.path.getmtime(file)))
+                                )
                                 continue
 
                             if not ignore_transcribing:
-                                TRANSCRIBE_QUEUE.put(folder_id)
+                                TRANSCRIBE_QUEUE.put(known_file_id)
                                 logging.info(f"File {file} added to transcription queue")
 
                         # Check if the FLAC file already exists before adding to the conversion queue
                         if extension == '.wav' and not os.path.exists(join(os.path.dirname(file), prefix + '.flac')):
                             if not ignore_converting:
-                                CONVERT_QUEUE.put(folder_id)
+                                CONVERT_QUEUE.put(known_file_id)
                                 logging.info(f"File {file} added to conversion queue")
 
                         checked_files.add(file)
                         known_files.add((folder_id, file))
 
-                        cursor.execute('INSERT OR IGNORE INTO known_files (file_name, folder_id, extension) VALUES (?, ?, ?)', (os.path.basename(file), folder_id, extension))
-                        
                         if extension in audio_extensions:
-                            cursor.execute('INSERT OR IGNORE INTO audio_files (known_file_id, unix_timestamp) VALUES ((SELECT id FROM known_files WHERE file_name = ? AND folder_id = ?), ?)', (os.path.basename(file), folder_id, int(os.path.getmtime(file))))
+                            cursor.execute(
+                                'INSERT OR IGNORE INTO audio_files (known_file_id, unix_timestamp) VALUES (?, ?)',
+                                (known_file_id, int(os.path.getmtime(file)))
+                            )
                         if extension in transcript_extensions:
-                            cursor.execute('INSERT OR IGNORE INTO transcript_files (known_file_id, unix_timestamp) VALUES ((SELECT id FROM known_files WHERE file_name = ? AND folder_id = ?), ?)', (os.path.basename(file), folder_id, int(os.path.getmtime(file))))
+                            cursor.execute(
+                                'INSERT OR IGNORE INTO transcript_files (known_file_id, unix_timestamp) VALUES (?, ?)',
+                                (known_file_id, int(os.path.getmtime(file)))
+                            )
 
                     conn.commit()
                 except sqlite3.OperationalError as e:

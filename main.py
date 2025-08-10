@@ -6,19 +6,15 @@ import sys
 import threading
 from threading import Event, Lock
 from queue import Queue
-from scanner import scanner
-from transcriber import transcriber
-from converter import wav2flac
-from state import export_queues_and_files, load_state
-from utils import load_recordings_folders_from_db, wav2flac
-import db_match_audio_transcript
+from tircorder.scanner import scanner
+from tircorder.transcriber import transcriber
+from tircorder.state import export_queues_and_files, load_state
+from tircorder.utils import load_recordings_folders_from_db, wav2flac
 import whisper
 from faster_whisper import WhisperModel
-from rate_limit import RateLimiter
+from tircorder.rate_limit import RateLimiter
 from multiprocessing import Value, Manager
-
-# Import the new match_audio_transcripts function
-from db_match_audio_transcript import match_audio_transcripts
+from tircorder.db_match_audio_transcript import match_audio_transcripts
 
 # Globals
 model = WhisperModel("medium.en", device="cpu", compute_type="int8")
