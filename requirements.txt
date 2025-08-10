@@ -18,3 +18,5 @@ librosa
 warnings
 vaderSentiment
 requests
+ofxparse
+qifparse
