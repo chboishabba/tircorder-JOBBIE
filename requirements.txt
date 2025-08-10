@@ -22,4 +22,6 @@ ofxparse
 qifparse
 
 piecash
+plotly
+
 networkx
