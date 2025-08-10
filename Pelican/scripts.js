@@ -11,7 +11,10 @@ function supports3d() {
 }
 
 function initTimeline3DIfSupported() {
-    if (!supports3d()) {
+    const prefersReducedMotion = window.matchMedia(
+        '(prefers-reduced-motion: reduce)'
+    ).matches;
+    if (prefersReducedMotion || !supports3d()) {
         return;
     }
 
@@ -26,9 +29,20 @@ function initTimeline3DIfSupported() {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
+    const skipLink = document.querySelector('.skip-link');
+    if (skipLink) {
+        skipLink.addEventListener('click', function(event) {
+            const mainContent = document.getElementById('main-content');
+            if (mainContent) {
+                event.preventDefault();
+                mainContent.focus();
+            }
+        });
+    }
+
     const timelineItems = document.querySelectorAll(".timeline-item");
 
-    timelineItems.forEach(item => {
+    timelineItems.forEach((item, index) => {
         const label = item.querySelector(".label");
         const audioPlayer = item.querySelector(".audio-player");
         const audio = audioPlayer.querySelector("audio");
@@ -36,14 +50,39 @@ document.addEventListener("DOMContentLoaded", function() {
         const transcript = audioPlayer.querySelector("pre");
         const transcriptDisplay = audioPlayer.querySelector(".transcript-display");
 
+        const playerId = `player-${index}`;
+        audioPlayer.id = playerId;
+        label.setAttribute("role", "button");
+        label.setAttribute("aria-controls", playerId);
+        label.setAttribute("aria-expanded", "false");
+
         label.addEventListener("click", function(event) {
             event.preventDefault();
-            if (audioPlayer.style.display === "block") {
+            const isExpanded = label.getAttribute("aria-expanded") === "true";
+            if (isExpanded) {
                 audioPlayer.style.display = "none";
+                label.setAttribute("aria-expanded", "false");
             } else {
                 audioPlayer.style.display = "block";
+                label.setAttribute("aria-expanded", "true");
                 if (!audio.src) {
                     audio.src = source.getAttribute("data-src");
+                }
+            }
+        });
+
+        label.addEventListener("keydown", function(event) {
+            if (event.key === "ArrowRight") {
+                event.preventDefault();
+                const next = timelineItems[index + 1];
+                if (next) {
+                    next.querySelector(".label").focus();
+                }
+            } else if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                const prev = timelineItems[index - 1];
+                if (prev) {
+                    prev.querySelector(".label").focus();
                 }
             }
         });

@@ -4,6 +4,20 @@ body {
     padding: 0;
 }
 
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: #000;
+    color: #fff;
+    padding: 8px;
+    z-index: 100;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
 header {
     background-color: #333;
     color: #fff;
@@ -59,7 +73,21 @@ h1, h2, h3 {
 .audio-player {
     margin-top: 10px;
 }
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
 
+.label:focus {
+    outline: 2px solid #000;
+}
 
 .highlight {
     background-color: yellow;
