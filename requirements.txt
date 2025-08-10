@@ -22,3 +22,4 @@ ofxparse
 qifparse
 
 piecash
+networkx
