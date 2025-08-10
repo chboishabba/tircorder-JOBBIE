@@ -4,7 +4,7 @@ import subprocess
 import logging
 import signal
 import sys
-from state import export_queues_and_files, load_state
+from tircorder.state import export_queues_and_files, load_state
 
 DB_PATH = 'state.db'
 

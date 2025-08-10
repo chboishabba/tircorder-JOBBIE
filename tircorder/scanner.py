@@ -4,8 +4,8 @@ import logging
 import sqlite3
 from queue import Queue
 from os.path import join
-from state import export_queues_and_files, load_state
-from rate_limit import RateLimiter
+from .state import export_queues_and_files, load_state
+from .rate_limit import RateLimiter
 
 def scanner(known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, checked_files, skip_files, skip_reasons):
     def load_recordings_folders_from_db():
