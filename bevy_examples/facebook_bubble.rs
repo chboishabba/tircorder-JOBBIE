@@ -7,13 +7,48 @@ use bevy_text_mesh::prelude::*;
 #[derive(Component, Default)]
 struct BubbleChildren(Vec<Entity>);
 
+/// Controls target scale and highlight state for a bubble.
+#[derive(Component)]
+struct BubbleAnimation {
+    /// Desired scale for the bubble.
+    target_scale: Vec3,
+    /// Whether the bubble is highlighted.
+    highlight: bool,
+}
+
+impl Default for BubbleAnimation {
+    fn default() -> Self {
+        Self {
+            target_scale: Vec3::ONE,
+            highlight: false,
+        }
+    }
+}
+
+/// Associates a bubble with a media entity.
+#[derive(Component)]
+struct RelatedMedia {
+    entity: Entity,
+}
+
+/// Fired when a media entity is selected.
+#[derive(Event)]
+struct SelectionEvent(Entity);
+
+
+
+
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(DefaultPickingPlugins)
         .add_plugins(TextMeshPlugin)
+        .add_event::<SelectionEvent>()
         .add_systems(Startup, setup)
         .add_systems(Update, spawn_children_on_click)
+
+        .add_systems(Update, (animate_bubbles, highlight_related_media))
         .run();
 }
 
@@ -23,10 +58,15 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
+    mut selection_writer: EventWriter<SelectionEvent>,
 ) {
     commands.spawn((Camera2dBundle::default(), PickingCameraBundle::default()));
 
     let parent = spawn_speech_bubble(
+
+    let media_entity = commands.spawn_empty().id();
+
+    let bubble_entity = spawn_speech_bubble(
         &mut commands,
         &mut meshes,
         &mut materials,
@@ -80,6 +120,11 @@ fn spawn_children_on_click(
             }
         }
     }
+    commands.entity(bubble_entity).insert(RelatedMedia {
+        entity: media_entity,
+    });
+
+    selection_writer.send(SelectionEvent(media_entity));
 }
 
 /// Spawn a Facebook-style speech bubble with rounded corners, text, a shadow,
@@ -121,6 +166,16 @@ pub fn spawn_speech_bubble(
             transform: Transform::from_translation(position),
             ..default()
         },))
+
+        .spawn((
+            MaterialMesh2dBundle {
+                mesh: bubble_mesh.into(),
+                material: materials.add(Color::rgb(0.96, 0.96, 0.96).into()),
+                transform: Transform::from_translation(position),
+                ..default()
+            },
+            BubbleAnimation::default(),
+        ))
         .id();
 
     // optional tail
@@ -160,3 +215,46 @@ pub fn spawn_speech_bubble(
 
     bubble_entity
 }
+
+
+/// Interpolates bubble scale toward its target.
+fn animate_bubbles(time: Res<Time>, mut query: Query<(&mut Transform, &BubbleAnimation)>) {
+    for (mut transform, anim) in &mut query {
+        if transform.scale != anim.target_scale {
+            transform.scale = transform
+                .scale
+                .lerp(anim.target_scale, time.delta_seconds() * 5.0);
+        }
+    }
+}
+
+/// Highlights bubbles whose related media has been selected.
+fn highlight_related_media(
+    mut events: EventReader<SelectionEvent>,
+    mut query: Query<(
+        &RelatedMedia,
+        &mut Handle<ColorMaterial>,
+        &mut BubbleAnimation,
+    )>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    for SelectionEvent(selected) in events.iter() {
+        for (related, material, mut anim) in &mut query {
+            let is_selected = related.entity == *selected;
+            anim.highlight = is_selected;
+            anim.target_scale = if is_selected {
+                Vec3::splat(1.2)
+            } else {
+                Vec3::ONE
+            };
+            if let Some(mat) = materials.get_mut(material) {
+                mat.color = if is_selected {
+                    Color::YELLOW
+                } else {
+                    Color::rgb(0.96, 0.96, 0.96)
+                };
+            }
+        }
+    }
+}
+

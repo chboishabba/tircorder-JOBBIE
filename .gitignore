@@ -42,3 +42,6 @@ state.db
 
 hourly_cache.sqlite
 
+# Ignore Rust build artifacts
+target/
+
