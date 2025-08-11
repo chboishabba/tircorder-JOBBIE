@@ -1,0 +1,9 @@
+[package]
+name = "bevy_app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = "0.16"
+bevy_mod_picking = "0.20"
+bevy_tweening = "0.13"
