@@ -7,3 +7,8 @@ edition = "2021"
 crossbeam-channel = "0.5"
 ffmpeg-cli = "0.1"
 
+[dev-dependencies]
+# Use Bevy's ECS and application utilities for testing
+bevy_app = { version = "0.13", default-features = false }
+bevy_ecs = { version = "0.13", default-features = false }
+
