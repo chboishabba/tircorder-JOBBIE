@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use bevy::sprite::MaterialMesh2dBundle;
-use bevy_text_mesh::prelude::*;
 
 /// Controls target scale and highlight state for a bubble.
 #[derive(Component)]
@@ -33,7 +32,6 @@ struct SelectionEvent(Entity);
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(TextMeshPlugin)
         .add_event::<SelectionEvent>()
         .add_systems(Startup, setup)
         .add_systems(Update, (animate_bubbles, highlight_related_media))
