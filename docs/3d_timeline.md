@@ -6,6 +6,13 @@ The 3D timeline models how interactions move across platforms and contacts over 
 - **Y – Time**: The vertical axis tracks chronological sequence so trends and gaps become clear.
 - **Z – Contact**: The depth axis separates individual contacts, allowing focused review of each relationship.
 
+## Email Drilldown
+
+Selecting an email bubble collapses the timeline to a daily view that isolates
+only that day's messages. **Y:** maintains chronological order, **X:** becomes
+contacts, and **Z:** resets to a flat plane. Use up/down keys to step through
+emails and left/right keys to switch contacts.
+
 ## Rationale
 
 Prioritizing platforms on the X-axis keeps similar media aligned, while a vertical time axis communicates progression at a glance. Using depth for contacts allows simultaneous comparison of different relationships without losing temporal context.
