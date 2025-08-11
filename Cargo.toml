@@ -1,0 +1,9 @@
+[package]
+name = "tircorder-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossbeam-channel = "0.5"
+ffmpeg-cli = "0.1"
+
