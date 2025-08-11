@@ -7,3 +7,7 @@ edition = "2021"
 crossbeam-channel = "0.5"
 ffmpeg-cli = "0.1"
 
+[dev-dependencies]
+tempfile = "3"
+hound = "3"
+
