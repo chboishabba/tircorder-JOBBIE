@@ -2,7 +2,12 @@ use crossbeam_channel::Sender;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fs;
+use std::io;
 use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::thread;
 use std::time::Duration;
 
@@ -12,15 +17,17 @@ const TRANSCRIPT_EXTENSIONS: &[&str] = &["srt", "txt", "vtt", "json", "tsv"];
 /// Starts a background thread that scans `directories` for new audio or transcript files.
 /// New WAV files are sent to `tx_convert` if no FLAC exists. Audio files without
 /// accompanying transcripts are sent to `tx_transcribe`.
+/// The provided `shutdown` flag terminates the loop when set to `true`.
 pub fn start_scanner(
     directories: Vec<PathBuf>,
     tx_transcribe: Sender<PathBuf>,
     tx_convert: Sender<PathBuf>,
-) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
+    shutdown: Arc<AtomicBool>,
+) -> Result<thread::JoinHandle<()>, io::Error> {
+    Ok(thread::spawn(move || {
         let mut known_files: HashSet<PathBuf> = HashSet::new();
 
-        loop {
+        while !shutdown.load(Ordering::SeqCst) {
             let mut current_files = HashSet::new();
 
             for dir in &directories {
@@ -68,8 +75,7 @@ pub fn start_scanner(
             }
 
             known_files.extend(current_files.into_iter());
-
             thread::sleep(Duration::from_secs(5));
         }
-    })
+    }))
 }
