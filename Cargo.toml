@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 crossbeam-channel = "0.5"
 ffmpeg-cli = "0.1"
+rusqlite = { version = "0.29", features = ["bundled"] }
 
