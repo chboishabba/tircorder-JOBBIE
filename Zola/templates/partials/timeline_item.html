@@ -1,0 +1,15 @@
+{% macro timeline_item(audio_symlink, transcript_symlink, platform, contact, frequency) %}
+{% set transcript_content = load_data(path="static/symlinks/" ~ transcript_symlink, format="plain") %}
+{% set encoded_audio = audio_symlink | urlencode %}
+{% set encoded_transcript = transcript_symlink | urlencode %}
+<div class="timeline-item" role="listitem" data-platform="{{ platform }}" data-contact="{{ contact }}"{% if frequency %} data-frequency="{{ frequency }}"{% endif %}>
+    <a href="#" class="label" data-audio="symlinks/{{ encoded_audio }}" data-transcript="symlinks/{{ encoded_transcript }}">{{ encoded_audio }}</a>
+    <div class="audio-player" style="display: none;">
+        <audio controls>
+            <source data-src="symlinks/{{ encoded_audio }}" type="audio/mpeg">
+        </audio>
+        <pre>{{ transcript_content | safe }}</pre>
+        <div class="highlight-container"></div>
+    </div>
+</div>
+{% endmacro %}
