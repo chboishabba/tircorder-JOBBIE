@@ -39,3 +39,5 @@ def test_step_index_wraps():
     assert step_index(0, 1, 2) == 1
     assert step_index(1, 1, 2) == 0
     assert step_index(0, -1, 2) == 1
+    assert step_index(3, 1, 0) == 0
+    assert step_index(0, 2, -5) == 0
