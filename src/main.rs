@@ -18,8 +18,10 @@ fn main() {
     let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("scan") => {
+            let dirs: Vec<PathBuf> = args.map(PathBuf::from).collect();
             let (tx_transcribe, _rx_t) = unbounded();
             let (tx_convert, rx_convert) = unbounded();
+
             let scanner_handle =
                 scanner::start_scanner(dirs, tx_transcribe, tx_convert, shutdown.clone())
                     .expect("failed to start scanner");
@@ -34,9 +36,6 @@ fn main() {
                 .expect("Error setting Ctrl-C handler");
             }
 
-
-            let scanner_handle = scanner::start_scanner(tx_transcribe, tx_convert);
-            let _converter_handle = converter::start_converter(rx_convert);
             let _ = scanner_handle.join();
             let _ = converter_handle.join();
         }
