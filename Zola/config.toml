@@ -1,0 +1,4 @@
+base_url = "https://example.com"
+title = "Zola site"
+compile_sass = false
+build_search_index = false
