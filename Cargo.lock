@@ -279,6 +279,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
+"windows-sys",
+]
+
+[[package]]
+
  "windows-sys 0.60.2",
 ]
 
@@ -587,6 +592,8 @@ checksum = "78bed444cc8a2160f01cbcf811ef18cac863ad68ae8ca62092e8db51d51c761c"
 dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
+ "windows-sys",
+
  "windows-sys 0.59.0",
 ]
 
@@ -705,6 +712,11 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
+ "windows-sys",
+]
+
+[[package]]
+
  "windows-sys 0.60.2",
 ]
 
@@ -783,6 +795,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8a64e3985349f2441a1a9ef0b853f869006c3855f2cda6862a94d26ebb9d6a1"
 dependencies = [
  "fastrand",
+ "getrandom",
+ "once_cell",
+ "rustix",
+ "windows-sys",
+
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
@@ -1202,6 +1219,7 @@ checksum = "6f42320e61fe2cfd34354ecb597f86f413484a798ba44a8ca1165c58d42da6c1"
 dependencies = [
  "bitflags",
 ]
+
 
 [[package]]
 name = "zerocopy"
