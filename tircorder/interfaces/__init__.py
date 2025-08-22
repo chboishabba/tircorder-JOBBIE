@@ -1,3 +1,7 @@
+"""Interface modules for Tircorder."""
+
+__all__ = []
+
 """Interface implementations for rule checking."""
 
 from .rule_check_client import RuleCheckClient, HTTPRuleCheckClient
