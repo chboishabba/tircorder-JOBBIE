@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% import "partials/timeline_item.html" as timeline %}
+
+{% block content %}
+<div id="timeline" role="list">
+  {{ timeline::timeline_item(audio_symlink="example.mp3", transcript_symlink="example.txt", platform="example", contact="contact", frequency=1) }}
+</div>
+{% endblock content %}
