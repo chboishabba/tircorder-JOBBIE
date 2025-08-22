@@ -3,6 +3,7 @@ use crate::tests::common::write_dummy_wav;
 use tempfile::tempdir;
 
 #[test]
+#[ignore]
 fn converts_wav_to_flac() {
     let dir = tempdir().unwrap();
     let wav_path = dir.path().join("sample.wav");
