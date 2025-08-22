@@ -25,3 +25,12 @@ def test_wordcloud_generation_and_retrieval(tmp_path):
     assert cur.fetchone()[0] == 1
     cache2.close()
 
+
+def test_empty_text_wordcloud(tmp_path):
+    db_path = tmp_path / "wc.sqlite"
+    cache = WordCloudCache(db_path=str(db_path))
+
+    summary = generate_wordcloud("", cache)
+    assert summary.word_counts == {}
+    assert summary.wordcloud_html == '<div class="wordcloud"></div>'
+    cache.close()
