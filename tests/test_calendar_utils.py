@@ -4,8 +4,10 @@ from calendar_utils import get_relative_counts, build_day_segments
 
 from datetime import datetime, date, timedelta
 
-from calendar_utils import get_relative_counts, build_day_segments
+from calendar_utils import get_relative_counts, build_day_segments, _get_date_range
 from hourly_cache import HourlyEventCache
+
+import pytest
 
 
 def make_dt(y, m, d, h=0):
@@ -61,7 +63,6 @@ def test_build_day_segments_by_app():
     assert counts["email"][1] == 1
 
 
-
 def test_hourly_cache_counts_and_use_in_relative_counts():
     cache = HourlyEventCache(":memory:")
     base = datetime(2024, 5, 6, 0, 0)
@@ -75,3 +76,13 @@ def test_hourly_cache_counts_and_use_in_relative_counts():
         [], view="week", reference_date=date(2024, 5, 6), cache=cache, threshold=10
     )
     assert intensities[date(2024, 5, 6)] == 1.0
+
+
+def test_get_date_range_invalid_view():
+    with pytest.raises(ValueError):
+        _get_date_range("invalid", date.today())
+
+
+def test_build_day_segments_invalid_resolution():
+    with pytest.raises(ValueError):
+        build_day_segments([], date.today(), resolution="hour")
