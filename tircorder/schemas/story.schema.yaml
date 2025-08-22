@@ -1,0 +1,22 @@
+$schema: "http://json-schema.org/draft/2020-12/schema"
+title: Story Event
+type: object
+required:
+  - event_id
+  - timestamp
+  - actor
+  - action
+  - details
+properties:
+  event_id:
+    type: string
+  timestamp:
+    type: string
+    format: date-time
+  actor:
+    type: string
+  action:
+    type: string
+  details:
+    type: object
+    additionalProperties: true

@@ -131,6 +131,15 @@ Contributions to the TiRCORDER project are welcome. Please fork the repository, 
 
 See [3D Timeline Axis Priorities](docs/3d_timeline.md) for axis priorities, accessibility, and fallback guidance.
 
+## Schemas
+
+The project defines reusable JSON schemas in `tircorder/schemas/`.
+- `story.schema.yaml` describes event fields (`event_id`, `timestamp`, `actor`,
+  `action`, `details`). Exporters validate events against this schema before
+  emitting them, and clients verify incoming data.
+- `rule_check_request.schema.yaml` and `rule_check_response.schema.yaml`
+  capture request and response structures for rule evaluation APIs.
+
 ## Accessibility
 
 The generated web interface uses semantic HTML and provides transcripts for audio clips,

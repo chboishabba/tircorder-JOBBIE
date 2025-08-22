@@ -26,3 +26,5 @@ plotly
 
 networkx
 nltk
+PyYAML
+jsonschema
