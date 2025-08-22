@@ -1,3 +1,8 @@
+"""Interfaces package for tircorder."""
+
+from .config import TircorderConfig
+
+__all__ = ["TircorderConfig"]
 """Interface modules for Tircorder."""
 
 __all__ = []
