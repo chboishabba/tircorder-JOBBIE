@@ -1,0 +1,13 @@
+$schema: "http://json-schema.org/draft/2020-12/schema"
+title: Rule Check Request
+type: object
+required:
+  - rule_id
+  - events
+properties:
+  rule_id:
+    type: string
+  events:
+    type: array
+    items:
+      $ref: ./story.schema.yaml

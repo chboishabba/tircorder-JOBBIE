@@ -1,5 +1,11 @@
+import json
 import socket
 import subprocess
+
+from tircorder.schemas import (
+    validate_rule_check_request,
+    validate_rule_check_response,
+)
 
 def transcribe_audio(audio_data):
     # Placeholder: replace with actual transcription logic
@@ -20,13 +26,29 @@ def handle_client(connection):
             data = connection.recv(1024)
             if not data:
                 break
-            # Process data (assuming it's a path to an audio file)
-            transcription = transcribe_audio(data.decode())
-            transcode_to_flac(data.decode())
-            # Send the transcription back to the client
-            connection.sendall(transcription.encode())
+            try:
+                payload = json.loads(data.decode())
+            except json.JSONDecodeError:
+                transcription = transcribe_audio(data.decode())
+                transcode_to_flac(data.decode())
+                connection.sendall(transcription.encode())
+                continue
+            response = handle_rule_check(payload)
+            connection.sendall(json.dumps(response).encode())
     finally:
         connection.close()
+
+
+def handle_rule_check(payload: dict) -> dict:
+    """Validate a rule check request and produce a response."""
+    validate_rule_check_request(payload)
+    response = {
+        "rule_id": payload["rule_id"],
+        "allowed": True,
+        "message": "ok",
+    }
+    validate_rule_check_response(response)
+    return response
 
 def start_server():
     host = ''
