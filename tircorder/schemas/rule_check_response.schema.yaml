@@ -1,0 +1,14 @@
+$schema: "http://json-schema.org/draft/2020-12/schema"
+title: Rule Check Response
+type: object
+required:
+  - rule_id
+  - allowed
+  - message
+properties:
+  rule_id:
+    type: string
+  allowed:
+    type: boolean
+  message:
+    type: string
