@@ -3,7 +3,12 @@ use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fs;
+use std::io;
 use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -40,9 +45,14 @@ impl RateLimiter {
 /// Starts a background thread that scans recordings folders from `state.db` for new files.
 /// New WAV files are sent to `tx_convert` if no FLAC exists. Audio files without
 /// accompanying transcripts are sent to `tx_transcribe`.
+/// The provided `shutdown` flag terminates the loop when set to `true`.
 pub fn start_scanner(
     tx_transcribe: Sender<PathBuf>,
     tx_convert: Sender<PathBuf>,
+    shutdown: Arc<AtomicBool>,
+) -> Result<thread::JoinHandle<()>, io::Error> {
+    Ok(thread::spawn(move || {
+
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let conn = Connection::open("state.db").expect("failed to open database");
@@ -65,6 +75,11 @@ pub fn start_scanner(
 
         let mut known_files: HashSet<PathBuf> = HashSet::new();
         let mut rate_limiter = RateLimiter::new(60);
+
+        while !shutdown.load(Ordering::SeqCst) {
+            let mut current_files = HashSet::new();
+
+            for dir in &directories {
 
         loop {
             let mut current_files: HashMap<PathBuf, (i64, bool, bool)> = HashMap::new();
@@ -182,8 +197,11 @@ pub fn start_scanner(
                 }
             }
 
+            known_files.extend(current_files.into_iter());
+            thread::sleep(Duration::from_secs(5));
+
             known_files.clear();
             known_files.extend(current_paths.into_iter());
         }
-    })
+    }))
 }
