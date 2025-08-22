@@ -7,6 +7,46 @@ from os.path import join
 from .state import export_queues_and_files, load_state
 from .rate_limit import RateLimiter
 
+AUDIO_EXTENSIONS = [".wav", ".flac", ".mp3", ".ogg", ".amr"]
+TRANSCRIPT_EXTENSIONS = [".srt", ".txt", ".vtt", ".json", ".tsv"]
+
+
+def scan_directories(directories):
+    """Scan provided directories once and return files to transcribe and convert.
+
+    Args:
+        directories: Iterable of tuples ``(path, ignore_transcribing, ignore_converting)``.
+
+    Returns:
+        ``(transcribe, convert)`` where each is a list of file paths.
+    """
+
+    transcribe = []
+    convert = []
+
+    for path, ignore_t, ignore_c in directories:
+        for name in os.listdir(path):
+            if not any(name.endswith(ext) for ext in AUDIO_EXTENSIONS + TRANSCRIPT_EXTENSIONS):
+                continue
+            file_path = os.path.join(path, name)
+            prefix, ext = os.path.splitext(file_path)
+            if ext.lower() in AUDIO_EXTENSIONS:
+                transcripts_exist = any(
+                    os.path.exists(prefix + t_ext) for t_ext in TRANSCRIPT_EXTENSIONS
+                )
+                if not transcripts_exist and not ignore_t:
+                    transcribe.append(file_path)
+                if (
+                    ext.lower() == ".wav"
+                    and not os.path.exists(prefix + ".flac")
+                    and not ignore_c
+                ):
+                    convert.append(file_path)
+
+    transcribe.sort()
+    convert.sort()
+    return transcribe, convert
+
 def scanner(known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, checked_files, skip_files, skip_reasons):
     def load_recordings_folders_from_db():
         conn = sqlite3.connect('state.db')
