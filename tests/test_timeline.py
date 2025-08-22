@@ -12,19 +12,29 @@ from timeline import (
 def _sample_events():
     return [
         {
-            "time": datetime(2024, 5, 1, 9),
+            "timestamp": datetime(2024, 5, 1, 9).isoformat(),
             "source": "email",
             "contact": "Alice",
             "id": 1,
         },
         {
-            "time": datetime(2024, 5, 1, 10),
+            "timestamp": datetime(2024, 5, 1, 10).isoformat(),
             "source": "chat",
             "contact": "Alice",
             "id": 2,
         },
-        {"time": datetime(2024, 5, 1, 8), "source": "email", "contact": "Bob", "id": 3},
-        {"time": datetime(2024, 5, 2, 9), "source": "email", "contact": "Bob", "id": 4},
+        {
+            "timestamp": datetime(2024, 5, 1, 8).isoformat(),
+            "source": "email",
+            "contact": "Bob",
+            "id": 3,
+        },
+        {
+            "timestamp": datetime(2024, 5, 2, 9).isoformat(),
+            "source": "email",
+            "contact": "Bob",
+            "id": 4,
+        },
     ]
 
 

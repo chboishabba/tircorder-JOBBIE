@@ -2,6 +2,9 @@
 import json
 from datetime import datetime
 from typing import Dict, List
+from uuid import uuid4
+
+from tircorder.schemas import validate_story
 
 
 def load_search_history(path: str) -> List[Dict]:
@@ -15,8 +18,8 @@ def load_search_history(path: str) -> List[Dict]:
     Returns
     -------
     list of dict
-        Each event contains ``time`` (as :class:`datetime`), ``query`` and
-        optional ``url`` keys.
+        Each event contains ``event_id``, ``timestamp``, ``actor``, ``action`` and
+        ``details`` keys.
     """
 
     with open(path, "r", encoding="utf-8") as fh:
@@ -36,11 +39,13 @@ def load_search_history(path: str) -> List[Dict]:
             query = title.replace("Searched for", "").strip().strip('"')
         else:
             query = title
-        events.append(
-            {
-                "time": dt,
-                "query": query,
-                "url": item.get("titleUrl"),
-            }
-        )
+        event = {
+            "event_id": f"google_search_{uuid4()}",
+            "timestamp": dt.isoformat(),
+            "actor": "user",
+            "action": "search",
+            "details": {"query": query, "url": item.get("titleUrl")},
+        }
+        validate_story(event)
+        events.append(event)
     return events
