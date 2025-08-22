@@ -2,6 +2,12 @@ use crate::scanner::scan_directories;
 use crate::tests::common::write_dummy_wav;
 use std::collections::HashSet;
 use std::fs;
+use crossbeam_channel::unbounded;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use std::time::Duration;
 use tempfile::tempdir;
 
 #[test]
@@ -23,6 +29,14 @@ fn scan_directories_respects_ignore_flags() {
     let d = dir2.path().join("d.wav");
     write_dummy_wav(&d);
 
+    let (tx_transcribe, rx_transcribe) = unbounded();
+    let (tx_convert, rx_convert) = unbounded();
+    let shutdown = Arc::new(AtomicBool::new(false));
+
+    let handle =
+        start_scanner(vec![dir.path().to_path_buf()], tx_transcribe, tx_convert, shutdown.clone())
+            .unwrap();
+
     let e = dir3.path().join("e.wav");
     write_dummy_wav(&e);
 
@@ -42,4 +56,6 @@ fn scan_directories_respects_ignore_flags() {
     let convert_set: HashSet<_> = convert.iter().cloned().collect();
     let expected_convert: HashSet<_> = vec![a, c, d].into_iter().collect();
     assert_eq!(convert_set, expected_convert);
+    shutdown.store(true, Ordering::SeqCst);
+    handle.join().unwrap();
 }
