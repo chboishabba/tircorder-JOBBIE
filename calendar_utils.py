@@ -2,18 +2,6 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 import calendar as _calendar
 
-
-def _get_date_range(view: str, reference_date: date):
-    """Return the inclusive date range for a given view.
-
-    Parameters
-    ----------
-    view: str
-        One of ``'day'``, ``'week'``, ``'fortnight'``, ``'month'``, or ``'year'``.
-    reference_date: datetime.date
-        The anchor date for the view.
-    """
-
 from typing import Optional
 
 try:  # optional dependency
@@ -45,37 +33,6 @@ def _get_date_range(view: str, reference_date: date):
     return start, end
 
 
-def get_relative_counts(entries, view: str = "week", reference_date: date | None = None):
-    """Compute relative intensity per day for the selected view.
-
-    Parameters
-    ----------
-    entries:
-        Iterable of :class:`datetime.datetime` representing individual entries.
-    view: str, optional
-        Calendar view to produce. Defaults to ``'week'``.
-    reference_date: datetime.date, optional
-        The anchor date for the view. Defaults to ``today``.
-
-    Returns
-    -------
-    dict
-        Mapping of :class:`datetime.date` to a float between ``0`` and ``1`` where
-        ``1`` represents the maximum number of entries observed in the range and
-        ``0`` indicates no entries.
-    """
-    if reference_date is None:
-        reference_date = date.today()
-
-    counts = Counter(dt.date() for dt in entries)
-    start, end = _get_date_range(view, reference_date)
-    num_days = (end - start).days + 1
-
-    day_counts = {
-        start + timedelta(days=i): counts.get(start + timedelta(days=i), 0)
-        for i in range(num_days)
-    }
-
 def get_relative_counts(
     entries=None,
     view: str = "week",
@@ -83,7 +40,29 @@ def get_relative_counts(
     cache: Optional["HourlyEventCache"] = None,
     threshold: int = 100,
 ):
-    """Compute relative intensity per day for the selected view."""
+    """Compute relative intensity per day for the selected view.
+
+    Parameters
+    ----------
+    entries:
+        Iterable of :class:`datetime.datetime` objects representing individual
+        entries. May be ``None`` when using ``cache``.
+    view: str, optional
+        Calendar view to produce. Defaults to ``'week'``.
+    reference_date: datetime.date, optional
+        Anchor date for the view. Defaults to ``today``.
+    cache: HourlyEventCache, optional
+        Cache instance used when ``entries`` are numerous or not supplied.
+    threshold: int, optional
+        Entry count above which to use ``cache`` when available. Defaults to
+        ``100``.
+
+    Returns
+    -------
+    dict[datetime.date, float]
+        Mapping of each day in the range to an intensity between ``0`` and
+        ``1``.
+    """
     if reference_date is None:
         reference_date = date.today()
 
@@ -139,8 +118,6 @@ def build_day_segments(
         list corresponds to the number of steps (1440 for minutes or 86400 for
         seconds).
     """
-
-    """Return per-time-step counts for a specific day."""
 
     if resolution == "second":
         step_seconds = 1
