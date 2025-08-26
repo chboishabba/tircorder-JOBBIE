@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from timeline import (
+from tircorder_utils.timeline import (
     bucket_by_day,
     emails_for_day,
     index_emails_by_contact,
@@ -57,7 +57,6 @@ def test_step_index_wraps():
     assert step_index(0, -1, 2) == 1
     assert step_index(3, 1, 0) == 0
     assert step_index(0, 2, -5) == 0
-
 
 
 def test_merge_event_streams_sorts_and_tags():

@@ -6,49 +6,60 @@ dictionary with at least a ``timestamp`` field.
 """
 
 from datetime import datetime, timedelta
-from typing import Dict, Iterable, List, Mapping
+from typing import Any, Dict, Iterable, List, Mapping
 
-from tircorder.schemas import validate_story
+
+def _extract_timestamp(event: Dict[str, Any]) -> datetime | None:
+    """Return a ``datetime`` from common timestamp keys.
+
+    Accepts either a ``datetime`` object or an ISO formatted string under
+    ``"timestamp"`` or ``"time"``. Returns ``None`` if no valid timestamp is
+    found.
+    """
+
+    ts = event.get("timestamp") or event.get("time")
+    if isinstance(ts, datetime):
+        return ts
+    if isinstance(ts, str):
+        try:
+            return datetime.fromisoformat(ts)
+        except ValueError:
+            return None
+    return None
 
 
 def merge_event_streams(event_streams: Mapping[str, Iterable[Dict]]) -> List[Dict]:
     """Merge streams from different sources into a single sorted list.
 
-    Parameters
-    ----------
-    event_streams:
-        Mapping of source name to an iterable of event dictionaries. Each
-        event must contain a ``timestamp`` key in ISO 8601 format.
-
-    Returns
-    -------
-    list of dict
-        Combined events tagged with their ``source`` and sorted by ``timestamp``.
+    Each event may specify its time under ``"timestamp"`` (ISO string) or
+    ``"time"`` (``datetime``). Events lacking a parsable timestamp are ignored.
+    The returned events are tagged with their ``source`` and sorted
+    chronologically.
     """
 
     events: List[Dict] = []
     for source, stream in event_streams.items():
         for event in stream:
-            validate_story(event)
+            ts = _extract_timestamp(event)
+            if ts is None:
+                continue
             item = dict(event)
             item["source"] = source
+            item["timestamp"] = ts.isoformat()
             events.append(item)
-    events.sort(
-        key=lambda e: datetime.fromisoformat(e.get("timestamp", datetime.min.isoformat()))
-    )
+    events.sort(key=lambda e: _extract_timestamp(e) or datetime.min)
     return events
 
 
 def bucket_by_day(events: Iterable[Dict]) -> Dict[datetime, List[Dict]]:
     """Group events into day buckets to enable zoomed-out views."""
+
     buckets: Dict[datetime, List[Dict]] = {}
     for event in events:
-        ts = event.get("timestamp")
-        try:
-            time = datetime.fromisoformat(ts)
-        except Exception:
+        ts = _extract_timestamp(event)
+        if ts is None:
             continue
-        key = time.replace(hour=0, minute=0, second=0, microsecond=0)
+        key = ts.replace(hour=0, minute=0, second=0, microsecond=0)
         buckets.setdefault(key, []).append(event)
     return buckets
 
@@ -74,18 +85,12 @@ def emails_for_day(events: Iterable[Dict], day: datetime) -> List[Dict]:
     end = start + timedelta(days=1)
     daily: List[Dict] = []
     for event in events:
-        ts = event.get("timestamp")
-        try:
-            time = datetime.fromisoformat(ts)
-        except Exception:
+        ts = _extract_timestamp(event)
+        if ts is None or event.get("source") != "email":
             continue
-        if event.get("source") != "email":
-            continue
-        if start <= time < end:
+        if start <= ts < end:
             daily.append(event)
-    daily.sort(
-        key=lambda e: datetime.fromisoformat(e.get("timestamp", datetime.min.isoformat()))
-    )
+    daily.sort(key=lambda e: _extract_timestamp(e) or datetime.min)
     return daily
 
 
@@ -99,11 +104,7 @@ def index_emails_by_contact(emails: Iterable[Dict]) -> Dict[str, List[Dict]]:
             continue
         index.setdefault(contact, []).append(email)
     for messages in index.values():
-        messages.sort(
-            key=lambda e: datetime.fromisoformat(
-                e.get("timestamp", datetime.min.isoformat())
-            )
-        )
+        messages.sort(key=lambda e: _extract_timestamp(e) or datetime.min)
     return index
 
 
