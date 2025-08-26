@@ -1,3 +1,4 @@
+from utilities.wordcloud_utils import WordCloudCache, generate_wordcloud
 from tircorder_utils.wordcloud_utils import WordCloudCache, generate_wordcloud
 
 

@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from utilities.timeline import (
 from tircorder_utils.timeline import (
     bucket_by_day,
     emails_for_day,
@@ -62,10 +63,33 @@ def test_step_index_wraps():
 def test_merge_event_streams_sorts_and_tags():
     streams = {
         "a": [
-            {"time": datetime(2024, 5, 1, 12), "id": 1},
-            {"time": datetime(2024, 5, 1, 10), "id": 2},
+            {
+                "timestamp": datetime(2024, 5, 1, 12).isoformat(),
+                "event_id": "1",
+                "id": 1,
+                "actor": "A",
+                "action": "act",
+                "details": {},
+            },
+            {
+                "timestamp": datetime(2024, 5, 1, 10).isoformat(),
+                "event_id": "2",
+                "id": 2,
+                "actor": "A",
+                "action": "act",
+                "details": {},
+            },
         ],
-        "b": [{"time": datetime(2024, 5, 1, 11), "id": 3}],
+        "b": [
+            {
+                "timestamp": datetime(2024, 5, 1, 11).isoformat(),
+                "event_id": "3",
+                "id": 3,
+                "actor": "B",
+                "action": "act",
+                "details": {},
+            }
+        ],
     }
     result = merge_event_streams(streams)
     assert [e["id"] for e in result] == [2, 3, 1]
@@ -74,10 +98,10 @@ def test_merge_event_streams_sorts_and_tags():
 
 def test_bucket_by_day_groups_and_skips_invalid():
     events = [
-        {"time": datetime(2024, 5, 1, 9), "id": 1},
-        {"time": datetime(2024, 5, 1, 10), "id": 2},
-        {"time": datetime(2024, 5, 2, 11), "id": 3},
-        {"time": "not a datetime", "id": 4},
+        {"timestamp": datetime(2024, 5, 1, 9).isoformat(), "id": 1},
+        {"timestamp": datetime(2024, 5, 1, 10).isoformat(), "id": 2},
+        {"timestamp": datetime(2024, 5, 2, 11).isoformat(), "id": 3},
+        {"timestamp": "not a datetime", "id": 4},
     ]
     buckets = bucket_by_day(events)
     day_one = datetime(2024, 5, 1)
