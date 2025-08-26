@@ -1,12 +1,6 @@
-import importlib.util
 import requests
 
-spec = importlib.util.spec_from_file_location(
-    "rule_check_client", "tircorder/interfaces/rule_check_client.py"
-)
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-HTTPRuleCheckClient = module.HTTPRuleCheckClient
+from tircorder.interfaces.rule_check_client import HTTPRuleCheckClient
 
 
 class DummyResponse:

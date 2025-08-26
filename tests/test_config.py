@@ -1,21 +1,11 @@
 """Tests for TircorderConfig persistence utilities."""
 
 import json
-import importlib.util
 from pathlib import Path
 
 import pytest
 
-MODULE_PATH = (
-    Path(__file__).resolve().parent.parent / "tircorder" / "interfaces" / "config.py"
-)
-SPEC = importlib.util.spec_from_file_location(
-    "tircorder.interfaces.config", MODULE_PATH
-)
-config_module = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
-SPEC.loader.exec_module(config_module)
-TircorderConfig = config_module.TircorderConfig
+from tircorder.interfaces.config import TircorderConfig
 
 
 def test_set_and_get_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
