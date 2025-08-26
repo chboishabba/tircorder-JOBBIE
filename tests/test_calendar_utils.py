@@ -1,5 +1,9 @@
 from datetime import date, datetime, timedelta
-from calendar_utils import get_relative_counts, build_day_segments, _get_date_range
+from tircorder_utils.calendar_utils import (
+    get_relative_counts,
+    build_day_segments,
+    _get_date_range,
+)
 from hourly_cache import HourlyEventCache
 
 import pytest
