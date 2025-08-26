@@ -34,7 +34,9 @@ def merge_event_streams(event_streams: Mapping[str, Iterable[Dict]]) -> List[Dic
             item["source"] = source
             events.append(item)
     events.sort(
-        key=lambda e: datetime.fromisoformat(e.get("timestamp", datetime.min.isoformat()))
+        key=lambda e: datetime.fromisoformat(
+            e.get("timestamp", datetime.min.isoformat())
+        )
     )
     return events
 
@@ -84,7 +86,9 @@ def emails_for_day(events: Iterable[Dict], day: datetime) -> List[Dict]:
         if start <= time < end:
             daily.append(event)
     daily.sort(
-        key=lambda e: datetime.fromisoformat(e.get("timestamp", datetime.min.isoformat()))
+        key=lambda e: datetime.fromisoformat(
+            e.get("timestamp", datetime.min.isoformat())
+        )
     )
     return daily
 
