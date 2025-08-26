@@ -5,7 +5,8 @@ ctranslate2==4.3.0
 faster-whisper==0.10.0
 librosa==0.10.1
 vaderSentiment==3.3.2
-requests==2.32.3
+# Optional dependencies
+# requests==2.32.3  # Needed for integrations.news_api and rule_check_client
 ofxparse==0.21
 qifparse==0.3.5
 piecash==1.1.0
