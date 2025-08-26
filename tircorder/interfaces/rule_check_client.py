@@ -1,11 +1,20 @@
-"""Clients for checking event compliance via Sensiblaw."""
+"""Clients for checking event compliance via Sensiblaw.
+
+This module requires the optional :mod:`requests` dependency.
+"""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
-import requests
+try:  # pragma: no cover - exercised in import tests
+    import requests
+except ImportError as exc:  # pragma: no cover - handled via tests
+    raise ImportError(
+        "The `requests` package is required to use `HTTPRuleCheckClient`. "
+        "Install it with `pip install requests`."
+    ) from exc
 
 
 class RuleCheckClient(ABC):

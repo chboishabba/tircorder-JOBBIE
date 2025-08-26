@@ -1,9 +1,18 @@
-"""Retrieve news articles for a specific day using the NewsAPI service."""
+"""Retrieve news articles for a specific day using the NewsAPI service.
+
+This module requires the optional :mod:`requests` dependency.
+"""
 
 from datetime import date
 from typing import Dict, List, Union
 
-import requests
+try:  # pragma: no cover - exercised in import tests
+    import requests
+except ImportError as exc:  # pragma: no cover - handled via tests
+    raise ImportError(
+        "The `requests` package is required to use the News API integration. "
+        "Install it with `pip install requests`."
+    ) from exc
 
 BASE_URL = "https://newsapi.org/v2/everything"
 
