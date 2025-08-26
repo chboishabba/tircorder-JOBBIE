@@ -1,4 +1,3 @@
-fn main() {}
 use crossbeam_channel::unbounded;
 use log::error;
 

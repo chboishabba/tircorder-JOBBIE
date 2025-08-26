@@ -1,4 +1,4 @@
-use crate::scanner::scan_directories;
+use crate::scanner::{scan_directories, start_scanner};
 use crate::tests::common::write_dummy_wav;
 use std::collections::HashSet;
 use std::fs;
@@ -34,7 +34,7 @@ fn scan_directories_respects_ignore_flags() {
     let shutdown = Arc::new(AtomicBool::new(false));
 
     let handle =
-        start_scanner(vec![dir.path().to_path_buf()], tx_transcribe, tx_convert, shutdown.clone())
+        start_scanner(vec![dir1.path().to_path_buf()], tx_transcribe, tx_convert, shutdown.clone())
             .unwrap();
 
     let e = dir3.path().join("e.wav");

@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from utilities.timeline import (
+from tircorder_utils.timeline import (
     bucket_by_day,
     emails_for_day,
     index_emails_by_contact,

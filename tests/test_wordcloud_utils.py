@@ -1,4 +1,5 @@
 from utilities.wordcloud_utils import WordCloudCache, generate_wordcloud
+from tircorder_utils.wordcloud_utils import WordCloudCache, generate_wordcloud
 
 
 def test_wordcloud_generation_and_retrieval(tmp_path):

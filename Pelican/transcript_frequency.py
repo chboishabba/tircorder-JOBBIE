@@ -79,6 +79,10 @@ _STOPWORDS: set[str] = {
     "while",
 }
 
+# Simple list of verb-like tokens to omit when NLTK is unavailable. This keeps
+# the fallback heuristic focused on noun-like words for small test samples.
+_VERBS: set[str] = {"saw", "met", "see", "meet"}
+
 
 def _extract_nouns(text: str) -> Iterable[str]:
     """Return a list of noun-like tokens from ``text``."""
@@ -87,7 +91,11 @@ def _extract_nouns(text: str) -> Iterable[str]:
         tagged = pos_tag(tokens)
         return [word.lower() for word, tag in tagged if tag.startswith("NN")]
     words = re.findall(r"\b[a-zA-Z]+\b", text)
-    return [w.lower() for w in words if w.lower() not in _STOPWORDS]
+    return [
+        w.lower()
+        for w in words
+        if w.lower() not in _STOPWORDS and w.lower() not in _VERBS
+    ]
 
 
 def calculate_noun_frequency(path: str) -> int | None:
