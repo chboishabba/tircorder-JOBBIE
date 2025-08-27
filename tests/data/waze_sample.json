@@ -1,0 +1,22 @@
+{
+  "drives": [
+    {
+      "startTime": "2024-05-01T08:00:00Z",
+      "endTime": "2024-05-01T08:30:00Z",
+      "lengthMeters": 15000,
+      "segments": [
+        {"lat": 34.0, "lon": -118.0},
+        {"lat": 34.1, "lon": -118.1}
+      ]
+    },
+    {
+      "startTime": "2024-05-02T09:00:00Z",
+      "endTime": "2024-05-02T09:15:00Z",
+      "lengthMeters": 5000,
+      "segments": [
+        {"lat": null, "lon": -118.2},
+        {"foo": "bar"}
+      ]
+    }
+  ]
+}
