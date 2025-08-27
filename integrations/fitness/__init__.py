@@ -1,3 +1,8 @@
+"""Fitness tracking connectors."""
+
+from .apple_health import AppleHealthConnector
+
+__all__ = ["AppleHealthConnector"]
 """Fitness integrations."""
 
 from .google_fit import GoogleFitConnector
