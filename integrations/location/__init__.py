@@ -1,3 +1,8 @@
+"""Connectors for location-based services."""
+
+from .uber import UberConnector
+
+__all__ = ["UberConnector"]
 """Location-based connectors."""
 
 from .waze import WazeConnector
