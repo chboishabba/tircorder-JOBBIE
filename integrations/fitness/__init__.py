@@ -3,6 +3,7 @@
 from .fitbit import FitbitConnector
 
 __all__ = ["FitbitConnector"]
+
 """Fitness tracking connectors."""
 
 from .apple_health import AppleHealthConnector
