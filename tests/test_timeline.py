@@ -1,6 +1,12 @@
 from datetime import datetime
 
 from utilities.timeline import (
+    bucket_by_day as util_bucket_by_day,
+    emails_for_day as util_emails_for_day,
+    index_emails_by_contact as util_index_emails_by_contact,
+    merge_event_streams as util_merge_event_streams,
+    step_index as util_step_index,
+)
 from tircorder_utils.timeline import (
     bucket_by_day,
     emails_for_day,
