@@ -1,0 +1,6 @@
+{
+  "messages": [
+    {"sender": "Alice", "timestamp": "2021-01-01T10:00:00", "text": "Happy New Year!"},
+    {"sender": "Bob", "timestamp": "2021-01-01T10:01:00", "text": "<Media omitted>"}
+  ]
+}
