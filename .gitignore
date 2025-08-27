@@ -6,6 +6,7 @@
 !dangling_transcripts.json
 !tests/data/google_maps/Location\ History.json
 !tests/data/google_maps/Semantic\ Location\ History/**/*.json
+!tests/data/waze_sample.json
 
 __pycache__/*.*
 __pycache__/
