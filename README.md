@@ -105,6 +105,15 @@ cd tircorder
 python tircorder.py
 ```
 
+## Testing
+
+Install development dependencies before running tests:
+
+```bash
+pip install -r requirements-dev.txt
+PYENV_VERSION=3.10.17 PYTHONPATH=. pytest tests/test_calendar_utils.py -q
+```
+
 
 ## Usage
 
