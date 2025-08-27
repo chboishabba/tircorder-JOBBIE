@@ -1,0 +1,16 @@
+[
+  {
+    "ts": "1610086400.000300",
+    "subtype": "channel_join",
+    "user": "U234",
+    "text": "<@U234> joined the channel"
+  },
+  {
+    "ts": "1610086401.000400",
+    "user": "U123",
+    "text": "See file",
+    "files": [
+      {"id": "F123", "name": "test.txt"}
+    ]
+  }
+]
