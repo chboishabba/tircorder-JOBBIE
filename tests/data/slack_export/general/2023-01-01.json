@@ -1,0 +1,13 @@
+[
+  {
+    "ts": "1610000000.000100",
+    "user": "U123",
+    "text": "Hello world"
+  },
+  {
+    "ts": "1610000001.000200",
+    "subtype": "bot_message",
+    "bot_id": "B123",
+    "text": "I am a bot"
+  }
+]
