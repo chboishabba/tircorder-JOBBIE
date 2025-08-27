@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<HealthData>
+  <Record type="HKQuantityTypeIdentifierStepCount" startDate="2024-05-01T10:00:00Z" endDate="2024-05-01T10:10:00Z" value="100"/>
+  <Record type="HKQuantityTypeIdentifierStepCount" startDate="2024-05-01T11:00:00Z" endDate="2024-05-01T11:10:00Z"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" unit="count/min" startDate="2024-05-01T10:05:00Z" endDate="2024-05-01T10:05:00Z" value="80"/>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" value="Asleep" startDate="2024-05-01T00:00:00Z" endDate="2024-05-01T06:00:00Z"/>
+  <Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="1800" totalEnergyBurned="300" totalDistance="5" startDate="2024-05-01T07:00:00Z" endDate="2024-05-01T07:30:00Z"/>
+</HealthData>
