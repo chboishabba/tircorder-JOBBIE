@@ -4,6 +4,7 @@
 !matches.json
 !dangling_audio.json
 !dangling_transcripts.json
+!tests/data/waze_sample.json
 
 __pycache__/*.*
 __pycache__/
