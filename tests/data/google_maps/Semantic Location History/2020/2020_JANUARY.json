@@ -1,0 +1,50 @@
+{
+  "timelineObjects": [
+    {
+      "placeVisit": {
+        "location": {
+          "latitudeE7": 377700000,
+          "longitudeE7": -1224194000,
+          "name": "Home"
+        },
+        "duration": {
+          "startTimestampMs": "1546387200000",
+          "endTimestampMs": "1546390800000"
+        }
+      }
+    },
+    {
+      "activitySegment": {
+        "startLocation": {
+          "latitudeE7": 377700000,
+          "longitudeE7": -1224194000,
+          "name": "Start"
+        },
+        "endLocation": {
+          "latitudeE7": 377800000,
+          "longitudeE7": -1224894000,
+          "name": "End"
+        },
+        "duration": {
+          "startTimestampMs": "1546390800000",
+          "endTimestampMs": "1546394400000"
+        },
+        "waypointPath": {
+          "points": [
+            {"latE7": 377750000, "lngE7": -1224494000}
+          ]
+        }
+      }
+    },
+    {
+      "placeVisit": {
+        "location": {
+          "name": "Unknown"
+        },
+        "duration": {
+          "startTimestampMs": "invalid"
+        }
+      }
+    }
+  ]
+}

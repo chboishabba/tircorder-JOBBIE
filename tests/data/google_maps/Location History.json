@@ -1,0 +1,19 @@
+{
+  "locations": [
+    {
+      "timestampMs": "1546387200000",
+      "latitudeE7": 377700000,
+      "longitudeE7": -1224194000,
+      "source": "GPS"
+    },
+    {
+      "timestampMs": "1546388200000",
+      "latitudeE7": 377709999,
+      "longitudeE7": -1224299999
+    },
+    {
+      "latitudeE7": 377709999,
+      "longitudeE7": -1224299999
+    }
+  ]
+}

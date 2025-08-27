@@ -4,6 +4,8 @@
 !matches.json
 !dangling_audio.json
 !dangling_transcripts.json
+!tests/data/google_maps/Location\ History.json
+!tests/data/google_maps/Semantic\ Location\ History/**/*.json
 
 __pycache__/*.*
 __pycache__/
