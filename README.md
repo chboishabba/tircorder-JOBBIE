@@ -133,6 +133,37 @@ Choose betwen whisper-python and ctranslate
 
 
 Modify the config.py file to adjust the sensitivity settings and other preferences according to your needs.
+### Whisper-WebUI backend integration
+
+Use `tircorder.utils.transcribe_webui` to submit recordings to a Whisper-WebUI
+backend. Point the helper at the base URL of your backend and it
+will POST to the ``/transcription`` endpoint (for example
+``http://localhost:8000/transcription``).
+
+Options should mirror the dependency names used by Whisper-WebUI's FastAPI
+routers. Provide them as nested dictionaries keyed by ``whisper``, ``vad``,
+``bgm_separation``, and ``diarization`` (or pre-flattened dotted keys). The
+helper flattens nested options into ``group.option`` pairs before building the
+multipart form payload, so boolean switches and enum choices map cleanly to the
+backend parameters.
+
+```python
+from tircorder.utils import transcribe_webui
+
+response = transcribe_webui(
+    "http://localhost:8000",
+    "recordings/meeting.wav",
+    options={
+        "whisper": {"model_size": "base", "compute_type": "int8"},
+        "vad": {"vad_filter": True},
+        "bgm_separation": {"is_separate_bgm": False},
+        "diarization": {"is_diarize": True, "diarization_device": "cpu"},
+    },
+)
+```
+
+The response is returned directly so callers can inspect status codes or parse
+JSON payloads as needed.
 Contributing
 
 Contributions to the TiRCORDER project are welcome. Please fork the repository, make your changes, and submit a pull request for review.

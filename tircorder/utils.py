@@ -2,6 +2,7 @@ import os
 import json
 import librosa
 import logging
+import mimetypes
 import subprocess
 import time
 import sqlite3
@@ -9,6 +10,7 @@ from queue import Queue
 from threading import Event, Lock
 from os.path import join
 from datetime import datetime
+from typing import Any, Dict, Mapping, Optional
 
 def load_recordings_folders_from_db(db_path='state.db'):
     conn = sqlite3.connect(db_path)
@@ -99,6 +101,65 @@ def load_state_from_disk():
 
 def load_traversal_results():
     return load_json('Pelican/traversal_results.json')
+
+def _flatten_webui_options(options: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return a flat dictionary compatible with Whisper-WebUI query params."""
+
+    flattened: Dict[str, Any] = {}
+    groups = {'whisper', 'vad', 'bgm_separation', 'diarization'}
+
+    for key, value in options.items():
+        if value is None:
+            continue
+
+        if key in groups and isinstance(value, Mapping):
+            for sub_key, sub_value in value.items():
+                if sub_value is None:
+                    continue
+                flattened[f"{key}.{sub_key}"] = sub_value
+            continue
+
+        flattened[key] = value
+
+    return flattened
+
+
+def transcribe_webui(base_url, audio_path, options=None, *, timeout=None, session=None):
+    """Submit ``audio_path`` to Whisper-WebUI's ``/transcription`` endpoint.
+
+    ``options`` can be a flat mapping or nested dictionaries keyed by
+    ``whisper``, ``vad``, ``bgm_separation``, and ``diarization``. Nested
+    settings are flattened so their form fields align with the FastAPI
+    dependency names used by the backend.
+    """
+
+    if session is None:
+        try:  # pragma: no cover - exercised via tests that supply a session
+            import requests
+        except ImportError as exc:  # pragma: no cover - handled through tests
+            raise ImportError(
+                'The `requests` package is required for `transcribe_webui`. '
+                'Install it with `pip install requests`.'
+            ) from exc
+
+        post = requests.post
+    else:
+        post = session.post
+
+    url = f"{base_url.rstrip('/')}/transcription"
+    data = _flatten_webui_options(options or {})
+    mime_type, _ = mimetypes.guess_type(audio_path)
+
+    with open(audio_path, 'rb') as stream:
+        files = {
+            'file': (os.path.basename(audio_path), stream, mime_type or 'application/octet-stream')
+        }
+        request_kwargs = {'files': files, 'data': data}
+        if timeout is not None:
+            request_kwargs['timeout'] = timeout
+        response = post(url, **request_kwargs)
+
+    return response
 
 def transcribe_ct2(file_path, model, skip_files):
     try:
