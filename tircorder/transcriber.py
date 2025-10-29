@@ -33,7 +33,7 @@ def _coerce_bool(value: Optional[object], default: bool = True) -> bool:
 def transcriber(
     TRANSCRIBE_QUEUE,
     CONVERT_QUEUE,
-    transcription_method,
+    transcription_method: Optional[str] = None,
     TRANSCRIBE_ACTIVE,
     transcription_complete,
     model,

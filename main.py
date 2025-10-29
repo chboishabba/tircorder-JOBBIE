@@ -72,7 +72,17 @@ def main():
     scanner_thread.start()
 
     logging.info("Starting transcribe thread...")
-    transcribe_thread = threading.Thread(target=transcriber, args=(TRANSCRIBE_QUEUE, CONVERT_QUEUE, 'ctranslate2', transcribing_active, transcription_complete, model))
+    transcribe_thread = threading.Thread(
+        target=transcriber,
+        args=(
+            TRANSCRIBE_QUEUE,
+            CONVERT_QUEUE,
+            None,
+            transcribing_active,
+            transcription_complete,
+            model,
+        ),
+    )
     transcribe_thread.daemon = True
     transcribe_thread.start()
 
