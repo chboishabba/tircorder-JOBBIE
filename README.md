@@ -22,6 +22,37 @@ TiRCorder, specifically tailored for professional environments, prioritizes secu
 - **GPU Acceleration**: Leverages GPU capabilities for enhanced performance (CPU also supported).
 - **Whisper-ctranslate2 Integration**: Offers a choice between ultra-fast [cTranslate2-powered](https://github.com/Softcatala/whisper-ctranslate2) transcription and versatile Python-based [Whisper](https://github.com/openai/whisper)	 for extended functionality.
 
+## Configuring transcription backends
+
+TiRCorder reads its runtime configuration from ``~/.tircorder/config.json`` by default.
+Operators can switch between transcription engines and provide connection details for
+remote services without touching the codebase by updating that file. For example, to
+activate the Whisper-WebUI backend running on ``https://webui.example`` with basic
+authentication, create the following configuration:
+
+```json
+{
+  "transcription": {
+    "method": "webui",
+    "webui": {
+      "base_url": "https://webui.example",
+      "username": "operator",
+      "password": "s3cret",
+      "poll_interval": 1.5,
+      "timeout": 900,
+      "options": {
+        "temperature": 0.1
+      }
+    }
+  }
+}
+```
+
+Any fields omitted from the ``webui`` block fall back to sensible defaults, including
+HTTPS certificate verification and the task status endpoint used for polling. The
+helper also honours ``api_key`` (added as a Bearer token) and custom ``headers`` entries
+for deployments that rely on token-based authentication.
+
 ## Coming Soon
 
 - **Speaker Diarization -- currently implemented upstream by whisperx**

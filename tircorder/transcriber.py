@@ -1,16 +1,55 @@
 import logging
 import os
 import sqlite3
+import time
 from datetime import datetime, timedelta
 from queue import Queue
+from typing import Dict, Optional
+
 from .state import export_queues_and_files, load_state
-from .utils import transcribe_audio, transcribe_ct2, transcribe_ct2_nonpythonic
+from .utils import (
+    get_transcription_backend,
+    transcribe_audio,
+    transcribe_ct2,
+    transcribe_ct2_nonpythonic,
+    transcribe_webui,
+)
 
 audio_extensions = ['.wav', '.flac', '.mp3', '.ogg', '.amr']
 
-def transcriber(TRANSCRIBE_QUEUE, CONVERT_QUEUE, transcription_method, TRANSCRIBE_ACTIVE, transcription_complete, model):
+
+def _coerce_bool(value: Optional[object], default: bool = True) -> bool:
+    """Return a boolean value from user-provided configuration."""
+
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in {"false", "0", "no", "off", ""}
+    return bool(value)
+
+
+def transcriber(
+    TRANSCRIBE_QUEUE,
+    CONVERT_QUEUE,
+    transcription_method,
+    TRANSCRIBE_ACTIVE,
+    transcription_complete,
+    model,
+    backend_overrides: Optional[Dict[str, Dict[str, object]]] = None,
+):
     known_files, transcribe_queue, convert_queue, skip_files, skip_reasons = load_state()
     proc_comp_timestamps_transcribe = []
+
+    backend_overrides = backend_overrides or {}
+    transcription_method, configured_backend = get_transcription_backend(
+        transcription_method
+    )
+    webui_config = configured_backend if isinstance(configured_backend, dict) else {}
+    if transcription_method == "webui":
+        override_values = backend_overrides.get("webui", {})
+        webui_config = {**webui_config, **override_values}
 
     def execute_with_retry(query, params=(), retries=5, delay=1):
         conn = sqlite3.connect('state.db')
@@ -57,7 +96,8 @@ def transcriber(TRANSCRIBE_QUEUE, CONVERT_QUEUE, transcription_method, TRANSCRIB
         logging.info(f"SYSTIME: {start_time.strftime('%Y-%m-%d %H:%M:%S')} | Starting transcription for {file}.")
 
         output_text = None
-        audio_duration = 0
+        audio_duration = 0.0
+        metadata = {}
 
         if transcription_method == 'python_whisper':
             output_text = transcribe_audio(file)
@@ -65,6 +105,60 @@ def transcriber(TRANSCRIBE_QUEUE, CONVERT_QUEUE, transcription_method, TRANSCRIB
             output_text, audio_duration = transcribe_ct2(file, model, skip_files)
         elif transcription_method == 'ctranslate2_nonpythonic':
             output_text, audio_duration = transcribe_ct2_nonpythonic(file)
+        elif transcription_method == 'webui':
+            if not webui_config.get("base_url"):
+                error_message = "WebUI base_url is not configured"
+                logging.error(error_message)
+                metadata = {"error": error_message}
+            else:
+                timeout_value = webui_config.get("timeout")
+                if timeout_value is not None:
+                    try:
+                        timeout_value = float(timeout_value)
+                    except (TypeError, ValueError):
+                        logging.warning(
+                            "Invalid timeout value '%s' provided for WebUI backend; using no timeout",
+                            timeout_value,
+                        )
+                        timeout_value = None
+
+                headers = dict(webui_config.get("headers") or {})
+                api_key = webui_config.get("api_key")
+                if api_key and "authorization" not in {
+                    key.lower(): key for key in headers
+                }:
+                    headers["Authorization"] = f"Bearer {api_key}"
+
+                auth_credentials = None
+                if webui_config.get("username"):
+                    auth_credentials = (
+                        webui_config.get("username"),
+                        webui_config.get("password", ""),
+                    )
+
+                output_text, audio_duration, metadata = transcribe_webui(
+                    file,
+                    base_url=webui_config.get("base_url", ""),
+                    options=webui_config.get("options"),
+                    poll_interval=float(webui_config.get("poll_interval", 2.0)),
+                    timeout=timeout_value,
+                    auth=auth_credentials,
+                    headers=headers,
+                    verify_ssl=_coerce_bool(webui_config.get("verify_ssl"), True),
+                    status_path=webui_config.get("status_path", "/task/{task_id}"),
+                )
+            if metadata.get("task_id"):
+                logging.info(
+                    "Whisper-WebUI task %s started for %s",
+                    metadata["task_id"],
+                    file,
+                )
+            if metadata.get("error"):
+                logging.error(
+                    "Whisper-WebUI transcription error for %s: %s",
+                    file,
+                    metadata["error"],
+                )
         else:
             logging.error(f"Unsupported transcription method: {transcription_method}")
             TRANSCRIBE_QUEUE.task_done()
@@ -93,8 +187,17 @@ def transcriber(TRANSCRIBE_QUEUE, CONVERT_QUEUE, transcription_method, TRANSCRIB
         else:
             logging.error(f"Transcription failed for {file}.")
             skip_files.add(file)
-            skip_reasons[file] = "transcription_failed"
-            execute_with_retry('INSERT OR IGNORE INTO skip_files (known_file_id, reason) VALUES (?, ?)', (known_file_id, "transcription_failed"))
+            error_reason = None
+            if transcription_method == 'webui' and metadata.get("error"):
+                error_reason = f"webui_error:{metadata['error']}"
+            elif metadata.get("error"):
+                error_reason = str(metadata["error"])
+            skip_reason = error_reason or "transcription_failed"
+            skip_reasons[file] = skip_reason
+            execute_with_retry(
+                'INSERT OR IGNORE INTO skip_files (known_file_id, reason) VALUES (?, ?)',
+                (known_file_id, skip_reason),
+            )
             TRANSCRIBE_QUEUE.task_done()
             continue
 

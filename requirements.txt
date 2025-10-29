@@ -4,6 +4,7 @@ torch==2.2.1
 ctranslate2==4.3.0
 faster-whisper==0.10.0
 librosa==0.10.1
+gradio_client==0.8.1
 vaderSentiment==3.3.2
 requests==2.32.3
 ofxparse==0.21
