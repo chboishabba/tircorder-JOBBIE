@@ -1,5 +1,7 @@
 import sqlite3
 
+from tircorder.chat_storage import ensure_chat_events_schema
+
 def create_tables():
     conn = sqlite3.connect('state.db')
     cursor = conn.cursor()
@@ -92,6 +94,8 @@ def create_tables():
         FOREIGN KEY(known_file_id) REFERENCES known_files(id)
     )
     ''')
+
+    ensure_chat_events_schema(conn)
 
     conn.commit()
     conn.close()
