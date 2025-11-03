@@ -13,7 +13,7 @@ operational resilience.
 ## Quick Start
 
 ### Prerequisites
-- Python **3.8+** (tested with 3.9.18 on Arch Linux). Please note that only some kernel versions and cards are officially supported by ROCm, though compatibility has been broadened by [TheRock](https://github.com/ROCm/TheRock)
+- Python **3.8+** (tested with 3.9.18 on Arch Linux). Please note that only some kernel versions and cards are officially supported by ROCm, though compatibility has been broadened by [TheRock](https://github.com/ROCm/TheRock).
 - [`ffmpeg`](https://ffmpeg.org/) available on your PATH.
 - Optional: GPU runtimes (CUDA, ROCm, or Metal) if you plan to leverage
   accelerated Whisper/cTranslate2 inference. Install platform-specific drivers
