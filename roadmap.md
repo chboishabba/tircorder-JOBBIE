@@ -1,6 +1,6 @@
-# TiRCorder/ITIR Roadmap
+# ITIR Suite Roadmap
 
-# TiRCorder Roadmap
+## TiRCorder
 
 TiRCorder is evolving from a command-line prototype into a polished suite of
 recording, transcription, and analytics tools for the wider ITIR ecosystem.
