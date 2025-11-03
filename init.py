@@ -5,6 +5,7 @@ import logging
 import signal
 import sys
 from tircorder.state import export_queues_and_files, load_state
+from tircorder.chat_storage import ensure_chat_events_schema
 
 DB_PATH = 'state.db'
 
@@ -40,6 +41,8 @@ def check_and_create_db():
                 file_path TEXT UNIQUE NOT NULL
             )
             ''')
+
+        ensure_chat_events_schema(conn)
 
         conn.commit()
         conn.close()
