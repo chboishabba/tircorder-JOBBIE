@@ -9,6 +9,7 @@ from its original command-line utility toward a full GUI experience while
 retaining its CLI and API for advanced operators. Licensed under the Mozilla
 Public License (MPL 2.0), the suite prioritizes transparency, privacy, and
 operational resilience.
+<img width="9011" height="20036" alt="NotebookLM Mind Map(7)" src="https://github.com/user-attachments/assets/304af15e-1533-4b99-8054-fd85078ea382" />
 
 ## Quick Start
 
