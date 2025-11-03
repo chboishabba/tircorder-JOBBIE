@@ -66,8 +66,8 @@ PY
 | Whisper & cTranslate2 transcription | Production | Switch engines per deployment.
 | Remote WebUI transcription | Production | Authenticate with username/password or API key.
 | Adaptive recording intervals | In development | Storage-saving heuristics under active testing.
-| Speaker diarization | Planned | Planned integration with WhisperX.
-| Word-level transcripts & confidence | Planned | Dependent on diarization pipeline.
+| Speaker diarization | Production | Planned integration with WhisperX.
+| Word-level transcripts & confidence | Production | Dependent on diarization pipeline.
 | Sentiment, timeline, and calendar dashboards | Prototype | Hooks for external activity sources (YouTube, Google Docs, Zapier).
 | Web-based operator interface | Prototype | Gradio interface available; dedicated UX in progress.
 
