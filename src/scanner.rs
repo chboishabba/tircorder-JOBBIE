@@ -1,7 +1,8 @@
+use crossbeam_channel::Sender;
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::io;
-use std::path::PathBuf;
-use crossbeam_channel::Sender;
+use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -19,9 +20,7 @@ const TRANSCRIPT_EXTENSIONS: &[&str] = &["srt", "txt", "vtt", "json", "tsv"];
 /// Files with existing transcript companions are excluded from the transcription
 /// queue. WAV files with existing FLAC companions are excluded from the
 /// conversion queue. `ignore_*` flags skip queueing entirely for that action.
-pub fn scan_directories(
-    dirs: Vec<(PathBuf, bool, bool)>,
-) -> (Vec<PathBuf>, Vec<PathBuf>) {
+pub fn scan_directories(dirs: Vec<(PathBuf, bool, bool)>) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let mut transcribe = Vec::new();
     let mut convert = Vec::new();
 
@@ -29,7 +28,10 @@ pub fn scan_directories(
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                let ext = path.extension().and_then(OsStr::to_str).map(|s| s.to_lowercase());
+                let ext = path
+                    .extension()
+                    .and_then(OsStr::to_str)
+                    .map(|s| s.to_lowercase());
                 let ext_str = match ext {
                     Some(e) => e,
                     None => continue,
@@ -52,10 +54,7 @@ pub fn scan_directories(
                     if !transcript_exists && !ignore_t {
                         transcribe.push(path.clone());
                     }
-                    if ext_str == "wav"
-                        && !path.with_extension("flac").exists()
-                        && !ignore_c
-                    {
+                    if ext_str == "wav" && !path.with_extension("flac").exists() && !ignore_c {
                         convert.push(path.clone());
                     }
                 }
@@ -68,21 +67,67 @@ pub fn scan_directories(
     (transcribe, convert)
 }
 
-/// Start a simple background scanner that wakes periodically until shutdown.
-///
-/// The current implementation only keeps the thread alive; it does not perform
-/// incremental scanning but provides a placeholder so that unit tests can
-/// exercise the threading contract.
+/// Start a background scanner that periodically inspects directories and queues
+/// new audio files for transcription and conversion until `shutdown` is set.
 pub fn start_scanner(
-    _dirs: Vec<PathBuf>,
-    _tx_transcribe: Sender<PathBuf>,
-    _tx_convert: Sender<PathBuf>,
+    dirs: Vec<PathBuf>,
+    tx_transcribe: Sender<PathBuf>,
+    tx_convert: Sender<PathBuf>,
     shutdown: Arc<AtomicBool>,
 ) -> Result<thread::JoinHandle<()>, io::Error> {
+    let scan_dirs: Vec<(PathBuf, bool, bool)> =
+        dirs.into_iter().map(|d| (d, false, false)).collect();
+
     Ok(thread::spawn(move || {
+        let mut dispatched_transcribe: HashSet<PathBuf> = HashSet::new();
+        let mut dispatched_convert: HashSet<PathBuf> = HashSet::new();
+
         while !shutdown.load(Ordering::SeqCst) {
+            let (transcribe, convert) = scan_directories(scan_dirs.clone());
+
+            for path in transcribe {
+                if shutdown.load(Ordering::SeqCst) {
+                    break;
+                }
+                if dispatched_transcribe.contains(&path) || transcript_exists(&path) {
+                    continue;
+                }
+                if tx_transcribe.send(path.clone()).is_ok() {
+                    dispatched_transcribe.insert(path);
+                }
+            }
+
+            for path in convert {
+                if shutdown.load(Ordering::SeqCst) {
+                    break;
+                }
+                if dispatched_convert.contains(&path) || path.with_extension("flac").exists() {
+                    continue;
+                }
+                if tx_convert.send(path.clone()).is_ok() {
+                    dispatched_convert.insert(path);
+                }
+            }
+
+            if shutdown.load(Ordering::SeqCst) {
+                break;
+            }
+
             thread::sleep(Duration::from_millis(50));
         }
     }))
 }
 
+fn transcript_exists(path: &Path) -> bool {
+    let stem = match path.file_stem().and_then(OsStr::to_str) {
+        Some(s) => s,
+        None => return false,
+    };
+
+    match path.parent() {
+        Some(parent) => TRANSCRIPT_EXTENSIONS
+            .iter()
+            .any(|ext| parent.join(format!("{stem}.{ext}")).exists()),
+        None => false,
+    }
+}
