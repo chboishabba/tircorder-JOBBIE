@@ -133,7 +133,7 @@ We warmly welcome contributions.
 ## Documentation & Further Reading
 - [3D Timeline Axis Priorities](docs/3d_timeline.md)
 - [Accessibility commitments](accessibility.md)
-- [Financial timeline concepts](docs/financial_timeline.md)
+- [Financial timeline concepts - please note these functions are being moved to SensibLaw but will still remain available for personal use within ITIR](docs/financial_timeline.md)
 - [Interface and visualisation sketches](docs/visualiser_interface.md)
 
 ## Accessibility
