@@ -14,12 +14,12 @@ A single roadmap for building the Streamline timeline visualisation that fuses f
 ## 2. Core Inputs and Owners
 | Source | Key Fields | Owner |
 | --- | --- | --- |
-| TiRCorder (speech & narrative) | Documents → Utterances → Sentences; speaker IDs; embeddings; sentiment/concern scores | AI/ML |
+| TiRCorder (speech & narrative capture) | Raw recordings → Utterances → Sentences; speaker IDs; embeddings; provenance-only links back to Layer 0 | Platform |
 | Finance adapters | Accounts; transactions; inferred transfers; account external IDs; raw payloads | Data Eng |
-| SensiBlaw (legal) | HarmInstances; WrongTypes; ValueFrames; obligations/remedies; evidence links | Legal Eng |
+| SensiBlaw (legal + NLP overlays) | HarmInstances; WrongTypes; ValueFrames; obligations/remedies; evidence links; sentiment/concern scores and other NLP-derived overlays | Legal Eng |
 | User timeline | User-entered milestones (moves, relationships, jobs) | Product |
 
-Dependencies: adapters emit canonical transaction rows; TiRCorder provides sentence-level features; legal layer emits harms/wrongs linked to evidence.
+Dependencies: adapters emit canonical transaction rows; TiRCorder provides raw utterance capture with provenance; SensiBlaw emits harms/wrongs, legal overlays, and NLP-derived scores linked to evidence.
 
 # Most up to date 
 18/11/2025 - dry'd
@@ -53,11 +53,11 @@ This file focuses on **what we need to build**: data contracts, pipeline, and re
 ---
 
 ## 4. Data Pipeline (Sequenced Steps)
-1. **Collect** inputs from TiRCorder, finance adapters, legal outputs, and user-entered events. Owners: AI/ML (TiRCorder), Data Eng (finance), Legal Eng (harm/wrong export), Product (user events).
-2. **Normalise** into canonical shapes: accounts/transactions; utterances with sentiment; legal harms/wrongs; timeline events. Owner: Data Eng.
+1. **Collect** inputs from TiRCorder (raw recordings/utterances + provenance), finance adapters, SensiBlaw overlays (sentiment/concern and legal), and user-entered events. Owners: Platform (TiRCorder capture), Data Eng (finance), Legal Eng (SensiBlaw export), Product (user events).
+2. **Normalise** into canonical shapes: accounts/transactions; utterances with pointers back to recordings; SensiBlaw-provided sentiment/concern overlays; legal harms/wrongs; timeline events. Owner: Data Eng.
 3. **Transfer inference** to reconcile intra/inter-account flows. Owner: Data Eng.
 4. **Cross-link** evidence: map transactions ↔ events, sentences ↔ harms, actors/relationships across systems. Owner: Platform Eng.
-5. **Compute ribbons**: windowed aggregates (net flow, concern/ control scores, legal risk counts) per relationship/account lane. Owner: AI/ML + Data Eng.
+5. **Compute ribbons**: windowed aggregates (net flow, SensiBlaw sentiment/concern/control scores, legal risk counts) per relationship/account lane. Owner: Legal Eng (SensiBlaw) + Data Eng.
 6. **Emit viz contract**: JSON payload with streams, events, lanes, and provenance pointers. Owner: Platform Eng.
 7. **Render** via chosen stack (see Section 6). Owner: Frontend.
 
@@ -119,14 +119,14 @@ Decision: Start with Option B for scalability; expose a thin adapter so lanes/ri
 
 ## 9. Milestones and Responsibilities
 1. **Milestone 1 — Data plumbing (2 weeks)**
-   * Finish finance adapters + tests; wire TiRCorder outputs; legal harm export with evidence links. Owners: Data Eng (adapters), AI/ML (scores), Legal Eng (harm feed).
+   * Finish finance adapters + tests; wire TiRCorder capture outputs; legal harm export with evidence links and SensiBlaw sentiment/concern overlays. Owners: Data Eng (adapters), Platform (TiRCorder capture), Legal Eng (SensiBlaw overlays + harm feed).
    * Deliver JSON contract sample covering all streams.
 2. **Milestone 2 — WebGL pipeline (2–3 weeks)**
    * Implement canvas/WebGL renderer for ribbons/threads; ingest JSON contract. Owner: Frontend.
 3. **Milestone 3 — Interactions & provenance (2 weeks)**
    * Hover/click, evidence drawer, mini-map; ensure provenance IDs resolve back. Owners: Frontend + Platform.
 4. **Milestone 4 — Legal overlays (2–3 weeks)**
-   * Render harms/wrongs, obligations/remedies bands, consent toggles. Owner: Legal Eng + Frontend.
+   * Render harms/wrongs, obligations/remedies bands, SensiBlaw-provided sentiment/concern ribbons, and consent toggles. Owner: Legal Eng + Frontend.
 5. **Milestone 5 — Polish & exports (2 weeks)**
    * Animations, accessibility, export (PNG/JSON pack), performance hardening. Owner: Frontend + QA.
 
@@ -134,7 +134,8 @@ Decision: Start with Option B for scalability; expose a thin adapter so lanes/ri
 
 ## 10. Deliverables Checklist
 * Canonical finance adapters with golden tests; transfer inference documented.
-* TiRCorder sentence-level scores accessible via API.
+* TiRCorder raw utterance capture with provenance exposed via API.
+* SensiBlaw-delivered sentiment/concern/control overlays and legal risk ribbons.
 * Legal harm/wrong export with ValueFrames and evidence references.
 * JSON contract specification and sample payloads.
 * Frontend renderer (Option B) with interactions and consent controls.
@@ -144,8 +145,7 @@ Decision: Start with Option B for scalability; expose a thin adapter so lanes/ri
 
 ## 11. Contact Points
 * Data Engineering: finance ingestion, transfer inference, ribbon aggregation.
-* AI/ML: TiRCorder features, sentiment/concern scoring, windowed aggregates.
-* Legal Engineering: harms/wrongs/value frames, obligations/remedies overlays.
-* Platform: cross-linking, APIs, JSON contract emission.
+* Platform: TiRCorder capture (recordings/utterances), provenance exposure, cross-linking, APIs, JSON contract emission.
+* Legal Engineering (SensiBlaw): harms/wrongs/value frames, obligations/remedies overlays, sentiment/concern/control scoring and ribbon production.
 * Frontend: rendering, interaction model, exports.
 
