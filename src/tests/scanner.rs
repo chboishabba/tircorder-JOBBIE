@@ -1,8 +1,9 @@
 use crate::scanner::{scan_directories, start_scanner};
 use crate::tests::common::write_dummy_wav;
+use crossbeam_channel::unbounded;
+use crossbeam_channel::TryRecvError;
 use std::collections::HashSet;
 use std::fs;
-use crossbeam_channel::unbounded;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -29,13 +30,17 @@ fn scan_directories_respects_ignore_flags() {
     let d = dir2.path().join("d.wav");
     write_dummy_wav(&d);
 
-    let (tx_transcribe, rx_transcribe) = unbounded();
-    let (tx_convert, rx_convert) = unbounded();
+    let (tx_transcribe, _rx_transcribe) = unbounded();
+    let (tx_convert, _rx_convert) = unbounded();
     let shutdown = Arc::new(AtomicBool::new(false));
 
-    let handle =
-        start_scanner(vec![dir1.path().to_path_buf()], tx_transcribe, tx_convert, shutdown.clone())
-            .unwrap();
+    let handle = start_scanner(
+        vec![dir1.path().to_path_buf()],
+        tx_transcribe,
+        tx_convert,
+        shutdown.clone(),
+    )
+    .unwrap();
 
     let e = dir3.path().join("e.wav");
     write_dummy_wav(&e);
@@ -49,8 +54,9 @@ fn scan_directories_respects_ignore_flags() {
     let (transcribe, convert) = scan_directories(dirs);
 
     let transcribe_set: HashSet<_> = transcribe.iter().cloned().collect();
-    let expected_transcribe: HashSet<_> =
-        vec![a.clone(), b.clone(), b_flac.clone(), e.clone()].into_iter().collect();
+    let expected_transcribe: HashSet<_> = vec![a.clone(), b.clone(), b_flac.clone(), e.clone()]
+        .into_iter()
+        .collect();
     assert_eq!(transcribe_set, expected_transcribe);
 
     let convert_set: HashSet<_> = convert.iter().cloned().collect();
@@ -58,4 +64,42 @@ fn scan_directories_respects_ignore_flags() {
     assert_eq!(convert_set, expected_convert);
     shutdown.store(true, Ordering::SeqCst);
     handle.join().unwrap();
+}
+
+#[test]
+fn start_scanner_dispatches_new_files() {
+    let dir = tempdir().unwrap();
+    let shutdown = Arc::new(AtomicBool::new(false));
+
+    let (tx_transcribe, rx_transcribe) = unbounded();
+    let (tx_convert, rx_convert) = unbounded();
+
+    let handle = start_scanner(
+        vec![dir.path().to_path_buf()],
+        tx_transcribe,
+        tx_convert,
+        shutdown.clone(),
+    )
+    .unwrap();
+
+    let audio = dir.path().join("sample.wav");
+    write_dummy_wav(&audio);
+
+    let transcribe_path = rx_transcribe.recv_timeout(Duration::from_secs(1)).unwrap();
+    let convert_path = rx_convert.recv_timeout(Duration::from_secs(1)).unwrap();
+
+    assert_eq!(transcribe_path, audio);
+    assert_eq!(convert_path, audio);
+
+    shutdown.store(true, Ordering::SeqCst);
+    handle.join().unwrap();
+
+    assert!(matches!(
+        rx_transcribe.try_recv(),
+        Err(TryRecvError::Empty | TryRecvError::Disconnected)
+    ));
+    assert!(matches!(
+        rx_convert.try_recv(),
+        Err(TryRecvError::Empty | TryRecvError::Disconnected)
+    ));
 }
