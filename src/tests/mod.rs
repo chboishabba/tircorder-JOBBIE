@@ -1,3 +1,4 @@
 pub mod common;
-mod scanner;
 mod converter;
+mod integration_scan;
+mod scanner;
