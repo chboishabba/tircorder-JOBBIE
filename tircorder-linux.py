@@ -1,76 +1,86 @@
+"""Launcher for starting the Tircorder server and client on Linux."""
+
+from __future__ import annotations
+
 import subprocess
 import sys
-import json
+from typing import Iterable, List
 
-def save_user_preferences(terminal):
-    with open("userprefs.json", "w") as file:
-        json.dump({"terminal": terminal}, file)
+SERVER_COMMAND: List[str] = [sys.executable, "run", "j_servski-11-05-24-9.py"]
+CLIENT_COMMAND: List[str] = [sys.executable, "jobbie_gpt_CLIENT_05-10-2024.py"]
 
-def load_user_preferences():
-    try:
-        with open("userprefs.json", "r") as file:
-            prefs = json.load(file)
-            return prefs["terminal"]
-    except (FileNotFoundError, KeyError):
-        return None
 
-def select_terminal():
-    terminals = {
-        "1": "gnome-terminal --",
-        "2": "xterm -e",
-        "3": "konsole -e",
-        "4": "xfce4-terminal -e",
-        "5": "lxterminal -e",
-        "6": "terminator -e",
-        "7": "tilix -e",
-        "8": "alacritty -e",
-        "9": "guake -e",
-        "10": "termite -e"
-    }
-    print("Select your preferred terminal emulator (enter the number):")
-    for key, value in terminals.items():
-        print(f"{key}: {value.split(' ')[0]}")
-    choice = input("Choice (1-10): ")
-    terminal = terminals.get(choice, "gnome-terminal --")
-    save_user_preferences(terminal)
-    return terminal
+def check_for_updates() -> None:
+    """Fetch the latest code changes."""
 
-def check_for_updates():
     print("Checking for updates...")
-    subprocess.run(["git", "pull"], check=True)
+    try:
+        subprocess.run(["git", "pull"], check=True)
+    except subprocess.CalledProcessError as exc:
+        print(f"Failed to update: {exc}")
+    else:
+        print("Update check complete.")
 
-def check_install_requirements():
+
+def check_install_requirements() -> None:
+    """Install Python dependencies if needed."""
+
     print("Checking and installing requirements...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], check=True)
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        print(f"Failed to install required packages: {exc}")
+    else:
+        print("Requirements are up to date.")
 
-def main_menu():
-    return input("Choose an option:\n0. Run Server\n1. Run Client\n2. Run Both\nEnter choice (0, 1, 2): ")
 
-def run_server(terminal_cmd):
+def main_menu() -> str:
+    """Prompt the user for which components to run."""
+
+    return input(
+        "Choose an option:\n0. Run Server\n1. Run Client\n2. Run Both\n"
+        "Enter choice (0, 1, 2): "
+    )
+
+
+def launch_process(command: Iterable[str]) -> subprocess.Popen[str]:
+    """Start a process in the current terminal."""
+
+    command_list = list(command)
+    print(f"Launching: {' '.join(command_list)}")
+    return subprocess.Popen(command_list)
+
+
+def run_server() -> subprocess.Popen[str]:
+    """Start the server process."""
+
     print("Starting server...")
-    subprocess.Popen(terminal_cmd.split() + ["python", "run j_servski-11-05-24-9.py"])
+    return launch_process(SERVER_COMMAND)
 
-def run_client(terminal_cmd):
+
+def run_client() -> subprocess.Popen[str]:
+    """Start the client process."""
+
     print("Starting client...")
-    subprocess.Popen(terminal_cmd.split() + ["python", "jobbie_gpt_CLIENT_05-10-2024.py"])
+    return launch_process(CLIENT_COMMAND)
+
 
 if __name__ == "__main__":
-    terminal_cmd = load_user_preferences()
-    if not terminal_cmd:
-        terminal_cmd = select_terminal()
-
     check_for_updates()
     check_install_requirements()
-    
+
     choice = main_menu()
     if choice == "0":
-        run_server(terminal_cmd)
+        run_server().wait()
     elif choice == "1":
-        run_client(terminal_cmd)
+        run_client().wait()
     elif choice == "2":
-        print("Running both server and client in separate instances.")
-        run_server(terminal_cmd)
-        run_client(terminal_cmd)
+        print("Running both server and client in separate processes.")
+        processes = [run_server(), run_client()]
+        for process in processes:
+            process.wait()
     else:
         print("Invalid choice. Exiting...")
-
