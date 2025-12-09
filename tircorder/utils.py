@@ -167,7 +167,7 @@ def _prepare_webui_payload(options: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _segments_to_text(segments: Any) -> str:
-    """Convert Whisper-WebUI segments into a transcript string."""
+    """Convert WhisperX-WebUI segments into a transcript string."""
 
     if not segments:
         return ""
@@ -206,7 +206,7 @@ def _segments_to_text(segments: Any) -> str:
 
 
 def _build_status_url(base_url: str, status_path: str, task_id: str) -> str:
-    """Compose the polling URL for a Whisper-WebUI task."""
+    """Compose the polling URL for a WhisperX-WebUI task."""
 
     formatted_path = status_path.format(task_id=task_id)
     return urljoin(f"{base_url.rstrip('/')}/", formatted_path.lstrip("/"))
@@ -225,11 +225,11 @@ def transcribe_webui(
     status_path: str = "/task/{task_id}",
     session: Optional[requests.Session] = None,
 ) -> Tuple[Optional[str], float, Dict[str, Any]]:
-    """Send audio to Whisper-WebUI and return the resulting transcript.
+    """Send audio to WhisperX-WebUI and return the resulting transcript.
 
     Args:
         file_path: Path to the audio file that should be transcribed.
-        base_url: Base URL of the Whisper-WebUI deployment.
+        base_url: Base URL of the WhisperX-WebUI deployment.
         options: Extra options forwarded to the `/transcribe_file` endpoint.
         poll_interval: Seconds between status checks.
         timeout: Maximum seconds to wait for a completed task. ``None``
@@ -268,7 +268,7 @@ def transcribe_webui(
         response.raise_for_status()
         start_data = response.json()
     except Exception as exc:  # pragma: no cover - network failures
-        logging.error("Failed to start Whisper-WebUI transcription: %s", exc)
+        logging.error("Failed to start WhisperX-WebUI transcription: %s", exc)
         metadata["error"] = str(exc)
         return None, 0.0, metadata
 
@@ -279,7 +279,7 @@ def transcribe_webui(
             break
 
     if not task_id:
-        logging.error("Whisper-WebUI response did not include a task identifier")
+        logging.error("WhisperX-WebUI response did not include a task identifier")
         metadata["error"] = "missing_task_id"
         return None, 0.0, metadata
 
@@ -292,7 +292,7 @@ def transcribe_webui(
         if deadline and time.monotonic() > deadline:
             metadata["error"] = "timeout"
             logging.error(
-                "Timed out waiting for Whisper-WebUI task %s to finish", task_id
+                "Timed out waiting for WhisperX-WebUI task %s to finish", task_id
             )
             return None, 0.0, metadata
 
@@ -307,7 +307,7 @@ def transcribe_webui(
             poll_response.raise_for_status()
             status_data = poll_response.json()
         except Exception as exc:  # pragma: no cover - network failures
-            logging.error("Failed to poll Whisper-WebUI status: %s", exc)
+            logging.error("Failed to poll WhisperX-WebUI status: %s", exc)
             metadata["error"] = str(exc)
             return None, 0.0, metadata
 
@@ -333,7 +333,7 @@ def transcribe_webui(
             error_message = status_data.get("error") or f"task_{status}"
             metadata["error"] = error_message
             logging.error(
-                "Whisper-WebUI task %s failed: %s", task_id, error_message
+                "WhisperX-WebUI task %s failed: %s", task_id, error_message
             )
             return None, audio_duration, metadata
 

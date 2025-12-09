@@ -1,4 +1,4 @@
-"""Tests for the Whisper-WebUI transcription helper."""
+"""Tests for the WhisperX-WebUI transcription helper."""
 
 from __future__ import annotations
 

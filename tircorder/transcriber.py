@@ -149,13 +149,13 @@ def transcriber(
                 )
             if metadata.get("task_id"):
                 logging.info(
-                    "Whisper-WebUI task %s started for %s",
+                    "WhisperX-WebUI task %s started for %s",
                     metadata["task_id"],
                     file,
                 )
             if metadata.get("error"):
                 logging.error(
-                    "Whisper-WebUI transcription error for %s: %s",
+                    "WhisperX-WebUI transcription error for %s: %s",
                     file,
                     metadata["error"],
                 )
