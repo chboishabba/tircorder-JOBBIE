@@ -12,6 +12,10 @@ import json
 import curses
 import socket
 import sys
+import argparse
+from pathlib import Path
+
+from tircorder.utils import DEFAULT_WEBUI_CONFIG, transcribe_webui
 
 # Instance manager for whisper
 transcription_lock = threading.Lock()
@@ -28,6 +32,53 @@ init(autoreset=True)
 def create_vad(aggressiveness=1):
     vad = webrtcvad.Vad(aggressiveness)
     return vad
+
+
+# Determine a supported sample rate for the selected device, preferring the
+# configured rate but falling back to the device default or common values.
+def resolve_sample_rate(
+    pyaudio_instance, device_id, channels, audio_format, preferred_rate
+):
+    """Return a supported sample rate for a device, favoring the preferred rate."""
+
+    vad_supported_rates = {8000, 16000, 32000, 48000}
+
+    def _is_supported(target_rate):
+        if target_rate not in vad_supported_rates:
+            return False
+        try:
+            return pyaudio_instance.is_format_supported(
+                target_rate,
+                input_device=device_id,
+                input_channels=channels,
+                input_format=audio_format,
+            )
+        except ValueError:
+            return False
+
+    device_info = pyaudio_instance.get_device_info_by_index(device_id)
+    default_rate = int(device_info.get("defaultSampleRate", preferred_rate))
+    candidate_rates = [
+        int(preferred_rate),
+        default_rate,
+        16000,
+        32000,
+        48000,
+        8000,
+    ]
+    seen = set()
+    for candidate_rate in candidate_rates:
+        if candidate_rate in seen:
+            continue
+        seen.add(candidate_rate)
+        if _is_supported(candidate_rate):
+            return candidate_rate, device_info.get("name", f"Device {device_id}")
+
+    raise ValueError(
+        f"No supported sample rate found for device {device_id} "
+        f"({device_info.get('name', 'Unknown')})."
+    )
+
 
 # Calculate RMS level
 def rms_level(data):
@@ -50,42 +101,85 @@ def display_transcription_as_html(json_data):
     html_content += '</body></html>'
     return html_content
 
-def transcribe_and_log(filename, start_timestamp):
+def transcribe_and_log(filename, start_timestamp, webui_url, webui_path):
+    """Run WhisperX-WebUI transcription on the WAV file and append text to a log."""
     with transcription_lock:
-        # Ensure the command uses properly quoted paths
-        cmd = f"whisper-ctranslate2 --vad_filter True --model medium.en --language en --output_dir \"{os.path.dirname(filename)}\" --device cpu \"{filename}\""
-        try:
-            # Run the command and capture output
-            result = subprocess.run(cmd, shell=True, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            print("Output:", result.stdout)
-        except subprocess.CalledProcessError as e:
-            # Print error if the command fails
-            print("Error:", e.stderr)
+        transcript, duration, metadata = transcribe_webui(
+            str(filename),
+            base_url=webui_url,
+            options=DEFAULT_WEBUI_CONFIG["options"],
+            poll_interval=DEFAULT_WEBUI_CONFIG["poll_interval"],
+            timeout=DEFAULT_WEBUI_CONFIG["timeout"],
+            status_path=DEFAULT_WEBUI_CONFIG["status_path"],
+            verify_ssl=DEFAULT_WEBUI_CONFIG["verify_ssl"],
+            transcribe_path=webui_path or DEFAULT_WEBUI_CONFIG["transcribe_path"],
+        )
+
+        if not transcript:
+            print(
+                Fore.RED
+                + f"Transcription failed for {filename}: {metadata.get('error')}"
+            )
             return
 
-        # Assuming the transcription tool outputs a .txt file in the same directory
-        txt_filename = f"{filename[:-4]}.txt"  # Replaces .wav with .txt
-        if os.path.exists(txt_filename):
-            with open(txt_filename, 'r') as file:
-                transcription = file.read()
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_entry = f"{timestamp} - {transcription}\n"
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"{timestamp} ({duration:.2f}s) - {transcript}\n"
 
-            # Append to log file
-            log_file_path = os.path.join(os.path.dirname(filename), "transcriptions.log")
-            with open(log_file_path, "a") as log_file:
-                log_file.write(log_entry)
+        log_file_path = os.path.join(os.path.dirname(filename), "transcriptions.log")
+        with open(log_file_path, "a") as log_file:
+            log_file.write(log_entry)
 
-            # Print in another console or window (simulated here)
-            print(Fore.CYAN + f"Transcription ({timestamp}): {transcription}")
+        print(Fore.CYAN + f"Transcription ({timestamp}): {transcript}")
 
 
 #adjusted max silence ms to be in line with countdown_timer
-def continuous_record(device_id, format=pyaudio.paInt16, channels=1, rate=16000, chunk_duration_ms=30, max_silence_ms=5000):
-    chunk_size = int(rate * chunk_duration_ms / 1000)
+def continuous_record(
+    device_id,
+    format=pyaudio.paInt16,
+    channels=1,
+    preferred_rate=16000,
+    chunk_duration_ms=30,
+    max_silence_ms=5000,
+    output_dir="recordings",
+    webui_url="http://127.0.0.1:7860",
+    webui_path="/_transcribe_file",
+):
+    """Record audio from the given device and trigger transcription on voice."""
+
     vad = create_vad()
     p = pyaudio.PyAudio()
-    stream = p.open(format=format, channels=channels, rate=rate, input=True, input_device_index=device_id, frames_per_buffer=chunk_size)
+
+    try:
+        rate, device_name = resolve_sample_rate(
+            p, device_id, channels, format, preferred_rate
+        )
+        print(
+            Fore.GREEN
+            + f"Using sample rate {rate} Hz on device '{device_name}' (id {device_id})"
+        )
+    except ValueError as exc:
+        print(Fore.RED + f"Could not configure input device: {exc}")
+        p.terminate()
+        return
+
+    chunk_size = int(rate * chunk_duration_ms / 1000)
+
+    try:
+        stream = p.open(
+            format=format,
+            channels=channels,
+            rate=rate,
+            input=True,
+            input_device_index=device_id,
+            frames_per_buffer=chunk_size,
+        )
+    except OSError as exc:
+        print(
+            Fore.RED
+            + f"Failed to open input stream on '{device_name}' (id {device_id}): {exc}"
+        )
+        p.terminate()
+        return
 
     print("Recording started. Speak into the microphone.")
     audio_data = collections.deque()
@@ -122,15 +216,26 @@ def continuous_record(device_id, format=pyaudio.paInt16, channels=1, rate=16000,
             if countdown_timer <= 0:
                 
                 if v_det:
-                    print(f"\nSAVED: Timer expired at: {now.strftime('%Y-%m-%d %H:%M:%S')}")
-                    filename = save_audio(list(audio_data), p, format, channels, rate)
+                    print(
+                        "\nSAVED: Timer expired at: "
+                        f"{now.strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
+                    filename, saved_timestamp = save_audio(
+                        list(audio_data), p, format, channels, rate, output_dir
+                    )
                     audio_data.clear()
-                    threading.Thread(target=transcribe_and_log, args=(filename,)).start()
+                    threading.Thread(
+                        target=transcribe_and_log,
+                        args=(filename, saved_timestamp, webui_url, webui_path),
+                    ).start()
                     countdown_timer = 5.0  # Reset the countdown after processing
                     v_det = False  # Reset v_det after handling
                     # change countdown timer here to 60s later so we get 1m+ recordings?
                 else:
-                    print(f"\nRecording discarded - no voice detected. Timer expired at: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(
+                        "\nRecording discarded - no voice detected. Timer expired at: "
+                        f"{now.strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
                     audio_data.clear()
                     countdown_timer = 5.0
                 #countdown_timer = 15.0  # Reset the countdown after processing
@@ -148,18 +253,18 @@ def continuous_record(device_id, format=pyaudio.paInt16, channels=1, rate=16000,
 
 
 
-# Save the audio data to a WAV file in Y:\__MEDIA\__Transcribing and Recording\2024\Dad Auto Transcriber3
-def save_audio(audio_frames, pyaudio_instance, format, channels, rate):
+# Save the audio data to a WAV file in the configured capture directory.
+def save_audio(audio_frames, pyaudio_instance, format, channels, rate, output_dir):
+    """Persist recorded audio frames to a WAV file and return the path."""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    directory = r"Y:\__MEDIA\__Transcribing and Recording\2024\Dad Auto Transcriber"  # Use a raw string for the path
-    if not os.path.exists(directory):
-        os.makedirs(directory, exist_ok=True)  # Create the directory if it does not exist
-    filename = f"{timestamp}.wav"
-    wf = wave.open(filename, 'wb')
+    directory = Path(output_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    filename = directory / f"{timestamp}.wav"
+    wf = wave.open(str(filename), "wb")
     wf.setnchannels(channels)
     wf.setsampwidth(pyaudio_instance.get_sample_size(format))
     wf.setframerate(rate)
-    wf.writeframes(b''.join(audio_frames))
+    wf.writeframes(b"".join(audio_frames))
     wf.close()
     print(f"\nAudio saved as {filename}")
     return filename, timestamp
@@ -178,9 +283,21 @@ def send_audio(file_path):
         print("Received:", data.decode())
     
 def convert_to_flac(wav_filename):
+    """Convert a WAV file to FLAC format."""
     flac_filename = wav_filename.replace('.wav', '.flac')
-    subprocess.run(['ffmpeg', '-i', wav_filename, '-c:a', 'flac', '-compression_level', '12', flac_filename])
-    return flac_idlename
+    subprocess.run(
+        [
+            'ffmpeg',
+            '-i',
+            wav_filename,
+            '-c:a',
+            'flac',
+            '-compression_level',
+            '12',
+            flac_filename,
+        ]
+    )
+    return flac_filename
 
 # Initialize PyAudio
 pSys = pyaudio.PyAudio()
@@ -207,19 +324,35 @@ def capture_microphone_audio(stream, stop_event):
         
 # GPT proposed queue management        
 def setup_and_run():
+    """Run concurrent capture of system and microphone audio."""
     # Setup audio streams
-    system_stream = p.open(format=pyaudio.paInt16, channels=2, rate=44100, input=True,
-                            input_device_index=DEVICE_INDEX_FOR_SYSTEM,  # Set appropriately
-                            frames_per_buffer=1024, as_loopback=True)
-    mic_stream = p.open(format=pyaudio.paInt16, channels=1, rate=44100, input=True,
-                        input_device_index=DEVICE_INDEX_FOR_MIC,  # Set appropriately
-                        frames_per_buffer=1024)
+    system_stream = p.open(
+        format=pyaudio.paInt16,
+        channels=2,
+        rate=44100,
+        input=True,
+        input_device_index=DEVICE_INDEX_FOR_SYSTEM,  # Set appropriately
+        frames_per_buffer=1024,
+        as_loopback=True,
+    )
+    mic_stream = p.open(
+        format=pyaudio.paInt16,
+        channels=1,
+        rate=44100,
+        input=True,
+        input_device_index=DEVICE_INDEX_FOR_MIC,  # Set appropriately
+        frames_per_buffer=1024,
+    )
     
     stop_event = threading.Event()
 
     # Start threads
-    system_thread = threading.Thread(target=capture_system_audio, args=(system_stream, stop_event))
-    mic_thread = threading.Thread(target=capture_microphone_audio, args=(mic_stream, stop_event))
+    system_thread = threading.Thread(
+        target=capture_system_audio, args=(system_stream, stop_event)
+    )
+    mic_thread = threading.Thread(
+        target=capture_microphone_audio, args=(mic_stream, stop_event)
+    )
 
     system_thread.start()
     mic_thread.start()
@@ -238,27 +371,67 @@ def setup_and_run():
 #if __name__ == "__main__":
 #    setup_and_run()
 
-    if __name__ == "__main__":
-        if len(sys.argv) > 1:
-            audio_file_path = sys.argv[1]
-            send_audio(audio_file_path)
-    else:
-        print("Usage: python client.py <audio_file_path>")
-    setup_and_run()
-
-
 # Main function
 def main():
+    """Launch the audio client with optional device selection."""
+    parser = argparse.ArgumentParser(description="Tircorder audio client")
+    parser.add_argument(
+        "--device-id",
+        type=int,
+        help="Input device id for microphone capture (defaults to first input)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="recordings",
+        help="Directory to store captured audio (created if missing)",
+    )
+    parser.add_argument(
+        "--webui-url",
+        type=str,
+        default="http://127.0.0.1:7860",
+        help="Base URL for WhisperX-WebUI backend",
+    )
+    parser.add_argument(
+        "--webui-path",
+        type=str,
+        default="/_transcribe_file",
+        help="Transcription endpoint path for WhisperX-WebUI",
+    )
+    args = parser.parse_args()
+
     print("Available recording devices:")
     p = pyaudio.PyAudio()
+    input_devices = []
     for i in range(p.get_device_count()):
         dev = p.get_device_info_by_index(i)
-        if dev['maxInputChannels'] > 0:
+        if dev["maxInputChannels"] > 0:
+            input_devices.append(i)
             print(f"Device ID {i}: {dev['name']}")
-    p.terminate()
 
-    #device_id = int(input("Enter the device ID you want to use: "))
-    continuous_record(0)
+    if not input_devices:
+        print(Fore.RED + "No input devices detected.")
+        p.terminate()
+        return
+
+    device_id = args.device_id if args.device_id is not None else input_devices[0]
+    if device_id not in input_devices:
+        print(
+            Fore.RED
+            + "Invalid device id "
+            f"{device_id}. Available: {', '.join(map(str, input_devices))}"
+        )
+        p.terminate()
+        return
+
+    p.terminate()
+    continuous_record(
+        device_id,
+        output_dir=args.output_dir,
+        webui_url=args.webui_url,
+        webui_path=args.webui_path,
+    )
+
 
 if __name__ == "__main__":
     main()
