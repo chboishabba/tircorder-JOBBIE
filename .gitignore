@@ -1,5 +1,7 @@
 # Ignore all .json files
 *.json
+*.wav
+
 # Allow committed data sources
 !matches.json
 !dangling_audio.json

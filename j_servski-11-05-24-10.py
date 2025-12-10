@@ -1,4 +1,5 @@
 import os
+import argparse
 import sys
 import signal
 from os.path import join, splitext
@@ -18,6 +19,7 @@ import ctranslate2
 from faster_whisper import WhisperModel
 import librosa
 import warnings
+from tircorder.utils import DEFAULT_WEBUI_CONFIG, transcribe_webui
 
 
 warnings.filterwarnings("ignore", message="Performing inference on CPU when CUDA is available")
@@ -121,8 +123,12 @@ def load_traversal_results(json_path):
             data = json.load(f)
         return data
     except FileNotFoundError:
-        logging.error(f"Traversal results file not found: {json_path}")
-        return {'audio_files': [], 'transcript_files': []}
+        logging.warning(f"Traversal results file not found: {json_path}")
+        data = {'audio_files': [], 'transcript_files': []}
+        os.makedirs(os.path.dirname(json_path), exist_ok=True)
+        with open(json_path, 'w') as f:
+            json.dump(data, f)
+        return data
     except Exception as e:
         logging.error(f"Failed to load traversal results: {e}")
         return {'audio_files': [], 'transcript_files': []}
@@ -195,7 +201,7 @@ def scanner(directory, known_files, currently_processing, file_groups, traversal
 
 
 
-def transcriber():
+def transcriber(base_directory, webui_url=None, webui_path="/_transcribe_file"):
     global process_status, proc_comp_timestamps_transcribe
     while True:
         file = TRANSCRIBE_QUEUE.get()
@@ -203,13 +209,27 @@ def transcriber():
         TRANSCRIBE_ACTIVE.set()
         logging.info(f"SYSTIME: {start_time.strftime('%Y-%m-%d %H:%M:%S')} | Starting transcription for {file}.")
         
-        if transcription_method == 'python_whisper':
+        if transcription_method == 'webui' and webui_url:
+            file_path = join(base_directory, file)
+            output_text, audio_duration, metadata = transcribe_webui(
+                file_path,
+                base_url=webui_url,
+                options=DEFAULT_WEBUI_CONFIG["options"],
+                poll_interval=DEFAULT_WEBUI_CONFIG["poll_interval"],
+                timeout=DEFAULT_WEBUI_CONFIG["timeout"],
+                status_path=DEFAULT_WEBUI_CONFIG["status_path"],
+                verify_ssl=DEFAULT_WEBUI_CONFIG["verify_ssl"],
+                transcribe_path=webui_path or DEFAULT_WEBUI_CONFIG["transcribe_path"],
+            )
+            if output_text is None:
+                logging.error(f"WebUI transcription failed for {file}: {metadata.get('error')}")
+        elif transcription_method == 'python_whisper':
             output_text, audio_duration = transcribe_audio(file)
         elif transcription_method == 'ctranslate2':
-            file_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
+            file_path = join(base_directory, file)
             output_text, audio_duration = transcribe_ct2(file_path)
         elif transcription_method == 'ctranslate2_nonpythonic':
-            file_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
+            file_path = join(base_directory, file)
             output_text, audio_duration = transcribe_ct2_nonpythonic(file_path)
         else:
             logging.error(f"Unsupported transcription method: {transcription_method}")
@@ -217,7 +237,7 @@ def transcriber():
             continue
 
         if output_text is not None:
-            output_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", splitext(file)[0] + '.txt')
+            output_path = join(base_directory, splitext(file)[0] + '.txt')
             try:
                 with open(output_path, 'w') as f:
                     f.write(output_text)
@@ -370,7 +390,7 @@ def transcribe_ct2(file_path):
 
 
 
-def wav2flac():
+def wav2flac(base_directory):
     global process_status, converting_lock, transcribing_active, transcription_complete
     while True:
         transcription_complete.wait()
@@ -389,7 +409,7 @@ def wav2flac():
 
         with converting_lock:
             process_status = f'converting {file}'
-            input_path = join("/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/", file)
+            input_path = join(base_directory, file)
             output_path = input_path.replace('.wav', '.flac')
             
             try:
@@ -487,14 +507,43 @@ def load_state_from_disk():
         ]
 
 def main():
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
 
-    directory = "/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/"
+    parser = argparse.ArgumentParser(description="Tircorder server")
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=(
+            "/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/"
+            "Dad Auto Transcriber/"
+        ),
+        help="Directory to watch for recordings and transcripts",
+    )
+    parser.add_argument(
+        "--webui-url",
+        type=str,
+        help="Optional WhisperX-WebUI base URL to use for transcription",
+    )
+    parser.add_argument(
+        "--webui-path",
+        type=str,
+        default="/_transcribe_file",
+        help="Transcription endpoint path for WhisperX-WebUI",
+    )
+    args = parser.parse_args()
+
+    directory = args.data_dir
+    os.makedirs(directory, exist_ok=True)
     currently_processing = set()
     file_groups = defaultdict(list)
 
-    traversal_results = load_traversal_results('/mnt/smbshare/Y/__MEDIA/__Transcribing and Recording/2024/Dad Auto Transcriber/Pelican/traversal_results.json')
+    pelican_dir = os.path.join(directory, "Pelican")
+    os.makedirs(pelican_dir, exist_ok=True)
+    traversal_json = os.path.join(pelican_dir, "traversal_results.json")
+    traversal_results = load_traversal_results(traversal_json)
 
     signal.signal(signal.SIGINT, handle_shutdown_signal)
     signal.signal(signal.SIGTERM, handle_shutdown_signal)
@@ -505,12 +554,17 @@ def main():
     scanner_thread.start()
 
     logging.info("Starting transcribe thread...")
-    transcribe_thread = Thread(target=transcriber)
+    if args.webui_url:
+        transcription_method = 'webui'
+
+    transcribe_thread = Thread(
+        target=transcriber, args=(directory, args.webui_url, args.webui_path)
+    )
     transcribe_thread.daemon = True
     transcribe_thread.start()
 
     logging.info("Starting convert thread...")
-    convert_thread = Thread(target=wav2flac)
+    convert_thread = Thread(target=wav2flac, args=(directory,))
     convert_thread.daemon = True
     convert_thread.start()
 
@@ -527,4 +581,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

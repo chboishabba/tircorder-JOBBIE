@@ -9,10 +9,10 @@ from os.path import join
 from queue import Queue
 from threading import Event, Lock
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urljoin
 
 import librosa
 import requests
+from gradio_client import Client, handle_file
 
 from tircorder.interfaces.config import TircorderConfig
 
@@ -20,6 +20,7 @@ from tircorder.interfaces.config import TircorderConfig
 DEFAULT_TRANSCRIPTION_METHOD = "ctranslate2"
 DEFAULT_WEBUI_CONFIG: Dict[str, Any] = {
     "base_url": "http://localhost:7860",
+    "transcribe_path": "/_transcribe_file",
     "options": {},
     "poll_interval": 2.0,
     "timeout": 600.0,
@@ -217,6 +218,7 @@ def transcribe_webui(
     *,
     base_url: str,
     options: Optional[Dict[str, Any]] = None,
+    transcribe_path: str = "/_transcribe_file",
     poll_interval: float = 2.0,
     timeout: Optional[float] = 600.0,
     auth: Optional[Tuple[str, str]] = None,
@@ -225,132 +227,23 @@ def transcribe_webui(
     status_path: str = "/task/{task_id}",
     session: Optional[requests.Session] = None,
 ) -> Tuple[Optional[str], float, Dict[str, Any]]:
-    """Send audio to WhisperX-WebUI and return the resulting transcript.
+    """Send audio to WhisperX-WebUI via gradio_client and return transcript text."""
 
-    Args:
-        file_path: Path to the audio file that should be transcribed.
-        base_url: Base URL of the WhisperX-WebUI deployment.
-        options: Extra options forwarded to the `/transcribe_file` endpoint.
-        poll_interval: Seconds between status checks.
-        timeout: Maximum seconds to wait for a completed task. ``None``
-            disables the timeout.
-        auth: Optional HTTP basic authentication credentials.
-        headers: Additional HTTP headers to include with requests.
-        verify_ssl: Whether to verify SSL certificates for HTTPS targets.
-        status_path: Endpoint template used to poll for task completion.
-        session: Optional requests session injected for testing.
-
-    Returns:
-        A tuple ``(transcript_text, duration_seconds, metadata)``. The metadata
-        dictionary always contains ``task_id`` and ``error`` keys. When the
-        transcription fails ``transcript_text`` is ``None`` and ``error``
-        includes the reported failure details.
-    """
-
-    metadata: Dict[str, Any] = {"task_id": None, "error": None}
-    request_session = session or requests.Session()
-    headers = headers or {}
-
-    start_endpoint = urljoin(f"{base_url.rstrip('/')}/", "transcribe_file")
-    payload = _prepare_webui_payload(options)
-
+    metadata: Dict[str, Any] = {"error": None}
     try:
-        with open(file_path, "rb") as handle:
-            response = request_session.post(
-                start_endpoint,
-                files={"file": (os.path.basename(file_path), handle)},
-                data=payload,
-                headers=headers,
-                auth=auth,
-                verify=verify_ssl,
-                timeout=timeout,
-            )
-        response.raise_for_status()
-        start_data = response.json()
+        client = Client(base_url, ssl_verify=verify_ssl)
+        result = client.predict(
+            files=[handle_file(file_path)],
+            api_name=transcribe_path,
+        )
+        if isinstance(result, (list, tuple)) and result:
+            transcript = result[0]
+            return str(transcript) if transcript is not None else None, 0.0, metadata
+        return None, 0.0, metadata
     except Exception as exc:  # pragma: no cover - network failures
-        logging.error("Failed to start WhisperX-WebUI transcription: %s", exc)
+        logging.error("Failed to run WhisperX-WebUI via gradio_client: %s", exc)
         metadata["error"] = str(exc)
         return None, 0.0, metadata
-
-    task_id = None
-    for key in ("task_id", "identifier", "id", "job_id", "queue_id"):
-        if start_data.get(key):
-            task_id = str(start_data[key])
-            break
-
-    if not task_id:
-        logging.error("WhisperX-WebUI response did not include a task identifier")
-        metadata["error"] = "missing_task_id"
-        return None, 0.0, metadata
-
-    metadata["task_id"] = task_id
-
-    status_url = _build_status_url(base_url, status_path, task_id)
-    deadline = None if timeout is None else time.monotonic() + timeout
-
-    while True:
-        if deadline and time.monotonic() > deadline:
-            metadata["error"] = "timeout"
-            logging.error(
-                "Timed out waiting for WhisperX-WebUI task %s to finish", task_id
-            )
-            return None, 0.0, metadata
-
-        try:
-            poll_response = request_session.get(
-                status_url,
-                headers=headers,
-                auth=auth,
-                verify=verify_ssl,
-                timeout=poll_interval + 5,
-            )
-            poll_response.raise_for_status()
-            status_data = poll_response.json()
-        except Exception as exc:  # pragma: no cover - network failures
-            logging.error("Failed to poll WhisperX-WebUI status: %s", exc)
-            metadata["error"] = str(exc)
-            return None, 0.0, metadata
-
-        status = str(status_data.get("status", "")).lower()
-        if not status:
-            status = str(status_data.get("state", "")).lower()
-
-        if status in {"queued", "pending", "in_progress", "processing"}:
-            time.sleep(poll_interval)
-            continue
-
-        audio_duration = 0.0
-        for key in ("duration", "audio_duration"):
-            value = status_data.get(key)
-            if value is not None:
-                try:
-                    audio_duration = float(value)
-                except (TypeError, ValueError):
-                    audio_duration = 0.0
-                break
-
-        if status in {"failed", "error", "cancelled"}:
-            error_message = status_data.get("error") or f"task_{status}"
-            metadata["error"] = error_message
-            logging.error(
-                "WhisperX-WebUI task %s failed: %s", task_id, error_message
-            )
-            return None, audio_duration, metadata
-
-        result = status_data.get("result")
-        if isinstance(result, dict) and "text" in result:
-            transcript = result.get("text") or ""
-        elif isinstance(result, dict) and "segments" in result:
-            transcript = _segments_to_text(result.get("segments"))
-        elif isinstance(result, list):
-            transcript = _segments_to_text(result)
-        else:
-            transcript = status_data.get("text", "")
-
-        if not transcript:
-            transcript = _segments_to_text(result)
-
-        return transcript or None, audio_duration, metadata
 def transcribe_ct2(file_path, model, skip_files):
     try:
         # Load and preprocess the audio
