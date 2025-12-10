@@ -108,9 +108,7 @@ def transcribe_and_log(filename, start_timestamp, webui_url, webui_path):
             str(filename),
             base_url=webui_url,
             options=DEFAULT_WEBUI_CONFIG["options"],
-            poll_interval=DEFAULT_WEBUI_CONFIG["poll_interval"],
             timeout=DEFAULT_WEBUI_CONFIG["timeout"],
-            status_path=DEFAULT_WEBUI_CONFIG["status_path"],
             verify_ssl=DEFAULT_WEBUI_CONFIG["verify_ssl"],
             transcribe_path=webui_path or DEFAULT_WEBUI_CONFIG["transcribe_path"],
         )
