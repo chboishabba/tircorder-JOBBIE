@@ -75,6 +75,12 @@ def parse_args() -> argparse.Namespace:
         type=str,
         help="Base URL for WhisperX-WebUI backend",
     )
+    parser.add_argument(
+        "--webui-path",
+        type=str,
+        default="/_transcribe_file",
+        help="Transcription endpoint path for WhisperX-WebUI",
+    )
     return parser.parse_args()
 
 
@@ -150,12 +156,21 @@ def prompt_output_dir(default: str = "recordings") -> str:
     return choice or default
 
 
-def build_server_command(server_script: str, data_dir: Optional[str]) -> List[str]:
+def build_server_command(
+    server_script: str,
+    data_dir: Optional[str],
+    webui_url: Optional[str],
+    webui_path: Optional[str],
+) -> List[str]:
     """Build the server command line."""
 
     cmd = [sys.executable, server_script]
     if data_dir:
         cmd.extend(["--data-dir", data_dir])
+    if webui_url:
+        cmd.extend(["--webui-url", webui_url])
+        if webui_path:
+            cmd.extend(["--webui-path", webui_path])
     return cmd
 
 
@@ -163,6 +178,7 @@ def build_client_command(
     device_id: Optional[int],
     output_dir: Optional[str],
     webui_url: Optional[str],
+    webui_path: Optional[str],
 ) -> List[str]:
     """Build the client command line."""
 
@@ -173,6 +189,8 @@ def build_client_command(
         cmd.extend(["--output-dir", output_dir])
     if webui_url:
         cmd.extend(["--webui-url", webui_url])
+        if webui_path:
+            cmd.extend(["--webui-path", webui_path])
     return cmd
 
 
@@ -219,13 +237,18 @@ def main() -> None:
     processes = []
     if mode in {"server", "both"}:
         server_cmd = build_server_command(
-            server_script or DEFAULT_SERVER_SCRIPT, data_dir
+            server_script or DEFAULT_SERVER_SCRIPT,
+            data_dir,
+            args.webui_url,
+            args.webui_path,
         )
         print("Starting server...")
         processes.append(launch_process(server_cmd))
 
     if mode in {"client", "both"}:
-        client_cmd = build_client_command(device_id, output_dir, args.webui_url)
+        client_cmd = build_client_command(
+            device_id, output_dir, args.webui_url, args.webui_path
+        )
         print("Starting client...")
         processes.append(launch_process(client_cmd))
 

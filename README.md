@@ -98,7 +98,6 @@ Follow these steps to tailor an installation:
          "base_url": "https://webui.example",
          "username": "operator",
          "password": "s3cret",
-         "poll_interval": 1.5,
          "timeout": 900,
          "options": {
            "temperature": 0.1
@@ -107,8 +106,18 @@ Follow these steps to tailor an installation:
      }
    }
    ```
-5. **Persist updates** with `TircorderConfig.set_config({...})`; the helper will
-   create the directory tree if it does not yet exist.
+   5. **Persist updates** with `TircorderConfig.set_config({...})`; the helper will
+      create the directory tree if it does not yet exist.
+
+### WebUI vs. backend APIs
+- The WhisperX Gradio WebUI endpoint (`/_transcribe_file`) is a synchronous
+  call: the request remains open until the transcription is finished and the
+  response contains the final outputs. There is no status or polling route
+  available for these endpoints beyond the UI's own progress bar.
+- For queued jobs with progress reporting, target the backend FastAPI service
+  instead: `POST /transcription` enqueues work and returns an identifier,
+  `GET /task/{identifier}` reports status/results, and background-music
+  separation downloads are available via `GET /task/file/{identifier}`.
 
 ## Roadmap & Vision
 Explore the long-term strategy, release themes, and community priorities in the

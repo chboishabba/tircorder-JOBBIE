@@ -215,9 +215,7 @@ def transcriber(base_directory, webui_url=None, webui_path="/_transcribe_file"):
                 file_path,
                 base_url=webui_url,
                 options=DEFAULT_WEBUI_CONFIG["options"],
-                poll_interval=DEFAULT_WEBUI_CONFIG["poll_interval"],
                 timeout=DEFAULT_WEBUI_CONFIG["timeout"],
-                status_path=DEFAULT_WEBUI_CONFIG["status_path"],
                 verify_ssl=DEFAULT_WEBUI_CONFIG["verify_ssl"],
                 transcribe_path=webui_path or DEFAULT_WEBUI_CONFIG["transcribe_path"],
             )
@@ -507,6 +505,7 @@ def load_state_from_disk():
         ]
 
 def main():
+    global transcription_method
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s - %(levelname)s - %(message)s",
@@ -556,6 +555,9 @@ def main():
     logging.info("Starting transcribe thread...")
     if args.webui_url:
         transcription_method = 'webui'
+        logging.info(
+            "Using WhisperX-WebUI backend at %s with path %s", args.webui_url, args.webui_path
+        )
 
     transcribe_thread = Thread(
         target=transcriber, args=(directory, args.webui_url, args.webui_path)
