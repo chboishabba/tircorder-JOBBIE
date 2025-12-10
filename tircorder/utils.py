@@ -350,7 +350,18 @@ def transcribe_webui(
         if timeout is not None:
             predict_kwargs["timeout"] = timeout
 
-        result = client.predict(**predict_kwargs)
+        try:
+            result = client.predict(**predict_kwargs)
+        except TypeError as exc:
+            timeout_kwarg = predict_kwargs.pop("timeout", None)
+            if timeout_kwarg is None or "timeout" not in str(exc):
+                raise
+
+            logging.warning(
+                "WhisperX-WebUI predict() rejected timeout kwarg; retrying without it (%s)",
+                exc,
+            )
+            result = client.predict(**predict_kwargs)
     except Exception as exc:  # pragma: no cover - network failures
         logging.error("Failed to run WhisperX-WebUI via gradio_client: %s", exc)
         metadata["error"] = str(exc)

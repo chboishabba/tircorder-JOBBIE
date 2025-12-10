@@ -32,6 +32,19 @@ class _FailingClient:
         raise RuntimeError("boom")
 
 
+class _RejectTimeoutClient:
+    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        self.calls = 0
+        self.calls_kwargs = []
+
+    def predict(self, **kwargs: Any):
+        self.calls += 1
+        self.calls_kwargs.append(kwargs)
+        if "timeout" in kwargs:
+            raise TypeError("Parameter `timeout` is not a valid key-word argument.")
+        return ["ok", 1.0]
+
+
 @pytest.fixture(autouse=True)
 def reset_config(tmp_path, monkeypatch: pytest.MonkeyPatch):
     config_path = tmp_path / "config.json"
@@ -76,6 +89,39 @@ def test_transcribe_webui_success(monkeypatch: pytest.MonkeyPatch, tmp_path) -> 
     assert predict_kwargs["timeout"] == 9.5
     assert predict_kwargs["files"] == [f"handled:{audio_file}"]
     assert predict_kwargs["whisper_hotwords"] == "[\"alpha\", \"beta\"]"
+
+
+def test_transcribe_webui_retries_without_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    created: Dict[str, Any] = {}
+
+    def _capture_client(*args: Any, **kwargs: Any) -> _RejectTimeoutClient:
+        client = _RejectTimeoutClient(*args, **kwargs)
+        created["client"] = client
+        return client
+
+    monkeypatch.setattr("tircorder.utils.Client", _capture_client)
+    monkeypatch.setattr("tircorder.utils.handle_file", lambda path: f"handled:{path}")
+
+    audio_file = tmp_path / "audio.wav"
+    audio_file.write_bytes(b"RIFF")
+
+    transcript, duration, metadata = transcribe_webui(
+        str(audio_file),
+        base_url="http://webui.local",
+        transcribe_path="/_transcribe_file",
+        timeout=9.5,
+    )
+
+    client = created["client"]
+    assert client.calls == 2
+    first_call, second_call = client.calls_kwargs
+    assert "timeout" in first_call
+    assert "timeout" not in second_call
+    assert transcript == "ok"
+    assert duration == pytest.approx(1.0)
+    assert metadata["error"] is None
 
 
 def test_transcribe_webui_handles_exceptions(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
