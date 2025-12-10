@@ -31,7 +31,10 @@ DEFAULT_WEBUI_CONFIG: Dict[str, Any] = {
     "status_path": "/task/{task_id}",
 }
 
-def get_transcription_backend(method_override: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
+
+def get_transcription_backend(
+    method_override: Optional[str] = None,
+) -> Tuple[str, Dict[str, Any]]:
     """Return the configured transcription backend and merged settings.
 
     Args:
@@ -58,63 +61,161 @@ def get_transcription_backend(method_override: Optional[str] = None) -> Tuple[st
     return method, transcription_config.get(method, {})
 
 
-def load_recordings_folders_from_db(db_path='state.db'):
+def load_recordings_folders_from_db(db_path="state.db"):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute('SELECT id, folder_path, ignore_transcribing, ignore_converting FROM recordings_folders')
+    cursor.execute(
+        "SELECT id, folder_path, ignore_transcribing, ignore_converting FROM recordings_folders"
+    )
     folders = cursor.fetchall()
     conn.close()
     return folders
 
 
-def wav2flac(CONVERT_QUEUE, converting_lock, transcribing_active, transcription_complete, process_status, recordings_folders):
-    def get_file_paths(file):
-        for folder_id, directory, ignore_transcribing, ignore_converting in recordings_folders:
-            input_path = join(directory, file)
+def _normalize_conversion_payload(payload: Any) -> Dict[str, Any]:
+    """Return a standardized conversion payload from various queue item shapes."""
+
+    if isinstance(payload, dict):
+        return payload
+
+    if isinstance(payload, (list, tuple)) and len(payload) >= 3:
+        return {
+            "known_file_id": payload[0],
+            "folder_path": payload[1],
+            "file_name": payload[2],
+        }
+
+    return {"known_file_id": payload}
+
+
+def _resolve_conversion_paths(
+    payload: Dict[str, Any], recordings_folders
+) -> Tuple[Optional[str], Optional[str]]:
+    """Determine the input and output paths for a conversion payload.
+
+    The lookup prefers explicit folder and file values from the payload, then
+    falls back to the database using ``known_file_id`` if provided. Finally,
+    it attempts to locate the file by name within the configured
+    ``recordings_folders``.
+    """
+
+    known_file_id = payload.get("known_file_id")
+    folder_path = payload.get("folder_path")
+    file_name = payload.get("file_name")
+
+    if folder_path and file_name:
+        input_path = join(folder_path, file_name)
+        return input_path, input_path.replace(".wav", ".flac")
+
+    if known_file_id is not None:
+        try:
+            conn = sqlite3.connect("state.db")
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT k.file_name, r.folder_path FROM known_files k "
+                "JOIN recordings_folders r ON k.folder_id = r.id WHERE k.id = ?",
+                (known_file_id,),
+            )
+            row = cursor.fetchone()
+            if row:
+                file_name, folder_path = row
+                input_path = join(folder_path, file_name)
+                return input_path, input_path.replace(".wav", ".flac")
+        except sqlite3.Error as exc:
+            logging.error(
+                "Failed to resolve paths for known_file_id %s: %s", known_file_id, exc
+            )
+        finally:
+            if "conn" in locals():
+                conn.close()
+
+    if file_name:
+        for _, directory, _, _ in recordings_folders:
+            input_path = join(directory, file_name)
             if os.path.exists(input_path):
-                output_path = input_path.replace('.wav', '.flac')
-                return input_path, output_path
-        return None, None
+                return input_path, input_path.replace(".wav", ".flac")
+
+    return None, None
+
+
+def wav2flac(
+    CONVERT_QUEUE,
+    converting_lock,
+    transcribing_active,
+    transcription_complete,
+    process_status,
+    recordings_folders,
+):
 
     while True:
         transcription_complete.wait()
-        file = CONVERT_QUEUE.get()
+        queue_item = CONVERT_QUEUE.get()
+        payload = _normalize_conversion_payload(queue_item)
+        known_file_id = payload.get("known_file_id")
         attempts = 0
 
         while transcribing_active.is_set() and attempts < 5:
-            logging.warning(f"Waiting to convert {file} as transcribing is active. Attempt {attempts+1}/5")
+            logging.warning(
+                "Waiting to convert %s as transcribing is active. Attempt %s/5",
+                payload,
+                attempts + 1,
+            )
             time.sleep(10)
             attempts += 1
 
         if attempts == 5:
-            logging.error(f"Conversion skipped for {file} after 5 attempts as transcribing is still active.")
-            CONVERT_QUEUE.put(file)
+            logging.error(
+                "Conversion skipped for %s after 5 attempts as transcribing is still active.",
+                payload,
+            )
+            CONVERT_QUEUE.put(payload)
             continue
 
         with converting_lock:
-            process_status.value = f'converting {file}'
-            input_path, output_path = get_file_paths(file)
-            
+            process_status.value = f"converting {payload}"
+            input_path, output_path = _resolve_conversion_paths(
+                payload, recordings_folders
+            )
+
             if not input_path or not output_path:
-                logging.error(f"File paths not found for {file}. Skipping conversion.")
+                logging.error(
+                    "File paths not found for payload %s (known_file_id=%s). Skipping conversion.",
+                    payload,
+                    known_file_id,
+                )
                 CONVERT_QUEUE.task_done()
                 continue
 
             try:
-                result = subprocess.run(["ffmpeg", "-i", input_path, "-c:a", "flac", output_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                logging.info(f"Conversion completed for {file}.")
+                result = subprocess.run(
+                    ["ffmpeg", "-i", input_path, "-c:a", "flac", output_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                logging.info(
+                    "Conversion completed for payload %s -> %s.", payload, output_path
+                )
                 if result.stderr:
-                    logging.error(f"Conversion errors for {file}: {result.stderr.decode()}")
+                    logging.error(
+                        "Conversion errors for %s: %s",
+                        payload,
+                        result.stderr.decode(),
+                    )
             except subprocess.CalledProcessError as e:
-                logging.error(f"Failed to convert {file} to FLAC: {e}")
+                logging.error(f"Failed to convert {payload} to FLAC: {e}")
             except Exception as e:
-                logging.error(f"An error occurred while converting {file} to FLAC: {e}")
+                logging.error(
+                    "An error occurred while converting %s to FLAC: %s", payload, e
+                )
 
             CONVERT_QUEUE.task_done()
             transcription_complete.clear()
             if not CONVERT_QUEUE.qsize():
-                process_status.value = 'housekeeping'
-                logging.info("All conversion tasks completed, entering housekeeping mode.")
+                process_status.value = "housekeeping"
+                logging.info(
+                    "All conversion tasks completed, entering housekeeping mode."
+                )
+
 
 def transcribe_audio(file_path):
     try:
@@ -128,12 +229,15 @@ def transcribe_audio(file_path):
         logging.error(f"Error in transcribing audio {os.path.basename(file_path)}: {e}")
         return None
     except Exception as e:
-        logging.error(f"Unhandled error in transcribing audio {os.path.basename(file_path)}: {e}")
+        logging.error(
+            f"Unhandled error in transcribing audio {os.path.basename(file_path)}: {e}"
+        )
         return None
+
 
 def load_json(file_path):
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             return json.load(f)
     except FileNotFoundError:
         logging.error(f"{file_path} not found.")
@@ -142,11 +246,13 @@ def load_json(file_path):
         logging.error(f"Failed to load {file_path}: {e}")
         return None
 
+
 def load_state_from_disk():
-    return load_json('state_backup.json')
+    return load_json("state_backup.json")
+
 
 def load_traversal_results():
-    return load_json('Pelican/traversal_results.json')
+    return load_json("Pelican/traversal_results.json")
 
 
 def _prepare_webui_payload(options: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -332,9 +438,7 @@ def transcribe_webui(
         if status in {"failed", "error", "cancelled"}:
             error_message = status_data.get("error") or f"task_{status}"
             metadata["error"] = error_message
-            logging.error(
-                "WhisperX-WebUI task %s failed: %s", task_id, error_message
-            )
+            logging.error("WhisperX-WebUI task %s failed: %s", task_id, error_message)
             return None, audio_duration, metadata
 
         result = status_data.get("result")
@@ -351,6 +455,8 @@ def transcribe_webui(
             transcript = _segments_to_text(result)
 
         return transcript or None, audio_duration, metadata
+
+
 def transcribe_ct2(file_path, model, skip_files):
     try:
         # Load and preprocess the audio
@@ -368,7 +474,7 @@ def transcribe_ct2(file_path, model, skip_files):
 
         logging.info(f"Detected language {language}")
         logging.info("Transcription completed successfully.")
-        
+
         detailed_transcription = ""
         for segment in segments:
             start = segment.start
@@ -405,29 +511,34 @@ def transcribe_ct2(file_path, model, skip_files):
         return None, 0
 
 
-
 def transcribe_ct2_nonpythonic(input_path):
     output_dir = os.path.dirname(input_path)
     cmd = [
         "whisper-ctranslate2",
         input_path,  # No need to quote within the list
-        "--model", "medium.en",
-        "--language", "en",
-        "--output_dir", output_dir,  # No need to quote within the list
-        "--device", "cpu"
+        "--model",
+        "medium.en",
+        "--language",
+        "en",
+        "--output_dir",
+        output_dir,  # No need to quote within the list
+        "--device",
+        "cpu",
     ]
 
     try:
         output_text = []
         start_time = None
         end_time = None
-        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
+        with subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        ) as proc:
             for line in proc.stdout:
                 if "Processing audio" in line:
                     # Extract segment times from the line
                     parts = line.split()
-                    start_time = float(parts[3].replace('s', ''))
-                    end_time = float(parts[5].replace('s', ''))
+                    start_time = float(parts[3].replace("s", ""))
+                    end_time = float(parts[5].replace("s", ""))
                 output_text.append(line)
                 logging.info(line.strip())  # Log the progressive output
             for err_line in proc.stderr:
@@ -438,7 +549,7 @@ def transcribe_ct2_nonpythonic(input_path):
             raise subprocess.CalledProcessError(proc.returncode, cmd)
 
         total_audio_duration = end_time - start_time if start_time and end_time else 0
-        return ''.join(output_text), total_audio_duration
+        return "".join(output_text), total_audio_duration
 
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to transcribe {input_path}: {e}")
