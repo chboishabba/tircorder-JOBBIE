@@ -151,12 +151,10 @@ def transcriber(
                     file,
                     base_url=webui_config.get("base_url", ""),
                     options=webui_config.get("options"),
-                    poll_interval=float(webui_config.get("poll_interval", 2.0)),
                     timeout=timeout_value,
                     auth=auth_credentials,
                     headers=headers,
                     verify_ssl=_coerce_bool(webui_config.get("verify_ssl"), True),
-                    status_path=webui_config.get("status_path", "/task/{task_id}"),
                 )
             if metadata.get("task_id"):
                 logging.info(
