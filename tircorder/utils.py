@@ -331,6 +331,8 @@ def transcribe_webui(
 
     try:
         client_kwargs: Dict[str, Any] = {"ssl_verify": verify_ssl}
+        if timeout is not None:
+            client_kwargs["timeout"] = timeout
         if auth:
             client_kwargs["auth"] = auth
         if headers:
@@ -339,16 +341,21 @@ def transcribe_webui(
             client = Client(base_url, **client_kwargs)
         except TypeError:
             logging.warning(
-                "gradio_client.Client does not accept provided auth/header kwargs; using ssl_verify only"
+                "gradio_client.Client does not accept provided auth/header kwargs; retrying with limited options"
             )
-            client = Client(base_url, ssl_verify=verify_ssl)
+            fallback_kwargs: Dict[str, Any] = {"ssl_verify": verify_ssl}
+            if timeout is not None:
+                try:
+                    client = Client(base_url, timeout=timeout, ssl_verify=verify_ssl)
+                except TypeError:
+                    client = Client(base_url, **fallback_kwargs)
+            else:
+                client = Client(base_url, **fallback_kwargs)
 
         payload = {"files": [handle_file(file_path)]}
         payload.update(_prepare_webui_payload(options))
 
         predict_kwargs: Dict[str, Any] = {"api_name": transcribe_path, **payload}
-        if timeout is not None:
-            predict_kwargs["timeout"] = timeout
 
         result = client.predict(**predict_kwargs)
     except Exception as exc:  # pragma: no cover - network failures

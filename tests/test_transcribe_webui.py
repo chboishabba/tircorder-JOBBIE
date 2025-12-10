@@ -23,9 +23,6 @@ class _FakeClient:
         self.predict_kwargs = kwargs
         return ["hello", 3.2]
 
-class _FailingClient:
-    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
-        pass
 
 class _FailingClient:
     def __init__(self, *_args: Any, **_kwargs: Any) -> None:
@@ -33,6 +30,22 @@ class _FailingClient:
 
     def predict(self, **_kwargs: Any):
         raise RuntimeError("boom")
+
+
+class _RejectTimeoutClient:
+    attempts = []
+
+    def __init__(self, base_url: str, **kwargs: Any) -> None:
+        self.base_url = base_url
+        self.init_kwargs = kwargs
+        self.predict_kwargs: Optional[Dict[str, Any]] = None
+        type(self).attempts.append(kwargs)
+        if "timeout" in kwargs:
+            raise TypeError("timeout not supported")
+
+    def predict(self, **kwargs: Any):
+        self.predict_kwargs = kwargs
+        return ["recovered", 7.5]
 
 
 @pytest.fixture(autouse=True)
@@ -70,26 +83,22 @@ def test_transcribe_webui_success(monkeypatch: pytest.MonkeyPatch, tmp_path) -> 
     assert client.base_url == "http://webui.local"
     assert client.init_kwargs["auth"] == ("user", "pass")
     assert client.init_kwargs["headers"] == {"X-Test": "1"}
+    assert client.init_kwargs["timeout"] == 9.5
     assert transcript == "hello"
     assert duration == pytest.approx(3.2)
     assert metadata["error"] is None
 
     predict_kwargs = client.predict_kwargs
     assert predict_kwargs["api_name"] == "/_transcribe_file"
-    assert predict_kwargs["timeout"] == 9.5
     assert predict_kwargs["files"] == [f"handled:{audio_file}"]
     assert predict_kwargs["whisper_hotwords"] == "[\"alpha\", \"beta\"]"
-
-    predict_kwargs = client.predict_kwargs
-    assert predict_kwargs["api_name"] == "/_transcribe_file"
-    assert predict_kwargs["timeout"] == 9.5
-    assert predict_kwargs["files"] == [f"handled:{audio_file}"]
-    assert predict_kwargs["whisper_hotwords"] == "[\"alpha\", \"beta\"]"
+    assert "timeout" not in predict_kwargs
 
 
 def test_transcribe_webui_retries_without_timeout(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
+    _RejectTimeoutClient.attempts = []
     created: Dict[str, Any] = {}
 
     def _capture_client(*args: Any, **kwargs: Any) -> _RejectTimeoutClient:
@@ -99,6 +108,29 @@ def test_transcribe_webui_retries_without_timeout(
 
     monkeypatch.setattr("tircorder.utils.Client", _capture_client)
     monkeypatch.setattr("tircorder.utils.handle_file", lambda path: f"handled:{path}")
+
+    audio_file = tmp_path / "audio.wav"
+    audio_file.write_bytes(b"RIFF")
+
+    transcript, duration, metadata = transcribe_webui(
+        str(audio_file),
+        base_url="http://webui.local",
+        timeout=3.0,
+    )
+
+    assert _RejectTimeoutClient.attempts[0]["timeout"] == 3.0
+    assert _RejectTimeoutClient.attempts[-1] == {"ssl_verify": True}
+
+    client = created["client"]
+    assert client.init_kwargs == {"ssl_verify": True}
+    assert transcript == "recovered"
+    assert duration == pytest.approx(7.5)
+    assert metadata["error"] is None
+
+    predict_kwargs = client.predict_kwargs
+    assert predict_kwargs["api_name"] == "/_transcribe_file"
+    assert predict_kwargs["files"] == [f"handled:{audio_file}"]
+    assert "timeout" not in predict_kwargs
 
 def test_transcribe_webui_handles_exceptions(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setattr("tircorder.utils.Client", _FailingClient)
