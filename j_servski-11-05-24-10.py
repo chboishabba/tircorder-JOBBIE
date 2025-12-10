@@ -505,6 +505,7 @@ def load_state_from_disk():
         ]
 
 def main():
+    global transcription_method
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s - %(levelname)s - %(message)s",
@@ -554,6 +555,9 @@ def main():
     logging.info("Starting transcribe thread...")
     if args.webui_url:
         transcription_method = 'webui'
+        logging.info(
+            "Using WhisperX-WebUI backend at %s with path %s", args.webui_url, args.webui_path
+        )
 
     transcribe_thread = Thread(
         target=transcriber, args=(directory, args.webui_url, args.webui_path)
