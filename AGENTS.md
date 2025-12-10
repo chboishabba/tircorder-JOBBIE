@@ -7,7 +7,7 @@
 Run tests before committing:
 
 ```
-PYENV_VERSION=3.10.17 PYTHONPATH=. pytest -q
+pytest -q
 ```
 
 ## Pull Requests
