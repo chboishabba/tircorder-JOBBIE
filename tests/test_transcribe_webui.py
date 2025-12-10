@@ -23,6 +23,9 @@ class _FakeClient:
         self.predict_kwargs = kwargs
         return ["hello", 3.2]
 
+class _FailingClient:
+    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        pass
 
 class _FailingClient:
     def __init__(self, *_args: Any, **_kwargs: Any) -> None:
@@ -77,6 +80,25 @@ def test_transcribe_webui_success(monkeypatch: pytest.MonkeyPatch, tmp_path) -> 
     assert predict_kwargs["files"] == [f"handled:{audio_file}"]
     assert predict_kwargs["whisper_hotwords"] == "[\"alpha\", \"beta\"]"
 
+    predict_kwargs = client.predict_kwargs
+    assert predict_kwargs["api_name"] == "/_transcribe_file"
+    assert predict_kwargs["timeout"] == 9.5
+    assert predict_kwargs["files"] == [f"handled:{audio_file}"]
+    assert predict_kwargs["whisper_hotwords"] == "[\"alpha\", \"beta\"]"
+
+
+def test_transcribe_webui_retries_without_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    created: Dict[str, Any] = {}
+
+    def _capture_client(*args: Any, **kwargs: Any) -> _RejectTimeoutClient:
+        client = _RejectTimeoutClient(*args, **kwargs)
+        created["client"] = client
+        return client
+
+    monkeypatch.setattr("tircorder.utils.Client", _capture_client)
+    monkeypatch.setattr("tircorder.utils.handle_file", lambda path: f"handled:{path}")
 
 def test_transcribe_webui_handles_exceptions(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setattr("tircorder.utils.Client", _FailingClient)
