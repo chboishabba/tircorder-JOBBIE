@@ -9,7 +9,6 @@ Run tests before committing:
 
 ```
 PYENV_VERSION=3.10.17 PYTHONPATH=. pytest tests/test_calendar_utils.py -q
-cargo test
 ```
 
 ## Pull Requests
