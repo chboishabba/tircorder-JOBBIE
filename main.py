@@ -30,26 +30,37 @@ transcribing_lock = threading.Lock()
 transcription_complete = threading.Event()
 checked_files = set()
 
+
 def handle_shutdown_signal(signum, frame):
-    logging.info("Shutdown signal received. Exporting queues, known files, and skip files...")
-    export_queues_and_files(known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, skip_files, skip_reasons)
+    logging.info(
+        "Shutdown signal received. Exporting queues, known files, and skip files..."
+    )
+    export_queues_and_files(
+        known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, skip_files, skip_reasons
+    )
     sys.exit(0)
+
 
 signal.signal(signal.SIGINT, handle_shutdown_signal)
 signal.signal(signal.SIGTERM, handle_shutdown_signal)
+
 
 def main():
     global TRANSCRIBE_QUEUE, CONVERT_QUEUE, known_files, checked_files, skip_files, skip_reasons
     global transcribing_active, transcription_complete, process_status, recordings_folders, converting_lock
 
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s',
-                        handlers=[logging.StreamHandler()])
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler()],
+    )
 
     logging.info("Main function started")
-    
+
     try:
-        known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, skip_files, skip_reasons = load_state()
+        known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, skip_files, skip_reasons = (
+            load_state()
+        )
     except Exception as e:
         logging.error(f"Error loading state: {e}")
         known_files, skip_files, skip_reasons = set(), set(), {}
@@ -58,16 +69,26 @@ def main():
 
     # Initialize shared variables
     manager = Manager()
-    process_status = manager.Value('s', '')
+    process_status = manager.Value("s", "")
     converting_lock = Lock()
     transcribing_active = Event()
     transcription_complete = Event()
-    
+
     # Load recordings folders from the database
     recordings_folders = load_recordings_folders_from_db()
 
     logging.info("Starting scanner thread...")
-    scanner_thread = threading.Thread(target=scanner, args=(known_files, TRANSCRIBE_QUEUE, CONVERT_QUEUE, checked_files, skip_files, skip_reasons))
+    scanner_thread = threading.Thread(
+        target=scanner,
+        args=(
+            known_files,
+            TRANSCRIBE_QUEUE,
+            CONVERT_QUEUE,
+            checked_files,
+            skip_files,
+            skip_reasons,
+        ),
+    )
     scanner_thread.daemon = True
     scanner_thread.start()
 
@@ -77,17 +98,27 @@ def main():
         args=(
             TRANSCRIBE_QUEUE,
             CONVERT_QUEUE,
-            None,
             transcribing_active,
             transcription_complete,
             model,
+            None,
         ),
     )
     transcribe_thread.daemon = True
     transcribe_thread.start()
 
     logging.info("Starting convert thread...")
-    convert_thread = threading.Thread(target=wav2flac, args=(CONVERT_QUEUE, converting_lock, transcribing_active, transcription_complete, process_status, recordings_folders))
+    convert_thread = threading.Thread(
+        target=wav2flac,
+        args=(
+            CONVERT_QUEUE,
+            converting_lock,
+            transcribing_active,
+            transcription_complete,
+            process_status,
+            recordings_folders,
+        ),
+    )
     convert_thread.daemon = True
     convert_thread.start()
 
@@ -100,7 +131,9 @@ def main():
             logging.info(f"Conversion Queue Size: {CONVERT_QUEUE.qsize()}")
 
             if TRANSCRIBE_QUEUE.qsize() == 0 and not transcribing_active.is_set():
-                logging.info("No transcription tasks running, ensuring conversion tasks are processed.")
+                logging.info(
+                    "No transcription tasks running, ensuring conversion tasks are processed."
+                )
                 transcription_complete.set()
                 try:
                     logging.debug(f"Ran match_audio_transcripts()")
@@ -111,7 +144,6 @@ def main():
     except KeyboardInterrupt:
         logging.info("Shutting down...")
 
+
 if __name__ == "__main__":
     main()
-
-
