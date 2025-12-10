@@ -1,7 +1,6 @@
 # AGENTS
 
 ## Code Style
-- Follow PEP 8 with Black formatting (line length 88).
 - Use 4-space indentation and include docstrings for public functions.
 
 ## Testing
