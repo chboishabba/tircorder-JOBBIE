@@ -60,6 +60,18 @@ PY
 - **Calendar and timeline visualizations** for historical insight.
 - **Update tracking** via [`Updates.md`](Updates.md) for release notes.
 
+## SensibLaw integration (Layer 0–1 alignment)
+TiRCorder is the event/narrative capture layer in the shared SensibLaw ontology.
+To keep provenance and identity stable, TiRCorder aligns to the shared substrate:
+
+- Normalize transcripts/notes into `Document` → `Sentence` → `Token` (Layer 0).
+- Anchor `Utterance` to `Sentence` via `UtteranceSentence`.
+- Resolve `speakers` into shared `Actor` records; keep actor traits in detail/alias tables.
+- Populate `lexemes`, `concepts`, and `phrase_occurrences` for canonical term mapping.
+- Link finance timelines through `accounts`, `transactions`, `transfers`, plus
+  `FinanceProvenance` and `EventFinanceLink`.
+- Use deterministic SensibLaw utilities (normalizers, matchers, resilient ingestion).
+
 ### Feature Matrix
 | Capability | Status | Notes |
 | --- | --- | --- |

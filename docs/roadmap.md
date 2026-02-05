@@ -24,6 +24,15 @@ This roadmap captures the most impactful initiatives currently in motion.
 - **Operator co-pilots** that surface suggested summaries and follow-up tasks
   in real time.
 
+## 2026: SensibLaw integration (deterministic substrate)
+- **Layer 0 alignment**: normalize transcripts/notes into `Document` → `Sentence` → `Token`.
+- **Utterance anchoring**: map `Utterance` ↔ `Sentence` via `UtteranceSentence`.
+- **Identity unification**: resolve `speakers` into shared `Actor` + detail/alias tables.
+- **Lexeme/concept population**: feed `lexemes`, `concepts`, `phrase_occurrences`.
+- **Finance provenance**: add `accounts`, `transactions`, `transfers` and link with
+  `FinanceProvenance` + `EventFinanceLink`.
+- **Shared infrastructure**: adopt deterministic normalizers, matchers, ingestion utilities, and FTS5 indexing.
+
 ## Community Contributions
 We welcome ideas and prototypes. Please open a GitHub Discussion or issue with
 "[Roadmap]" in the title so we can collaborate on prioritization.
