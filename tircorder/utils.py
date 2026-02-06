@@ -27,6 +27,9 @@ DEFAULT_WEBUI_CONFIG: Dict[str, Any] = {
     "api_key": None,
     "headers": {},
     "verify_ssl": True,
+    "emit_envelope": False,
+    "envelope_dir": None,
+    "envelope_format": "sb_execution_envelope_v1",
 }
 
 
@@ -327,7 +330,7 @@ def transcribe_webui(
     polling is not available on this interface.
     """
 
-    metadata: Dict[str, Any] = {"error": None}
+    metadata: Dict[str, Any] = {"error": None, "segments": None, "model": None, "language": None}
 
     try:
         client_kwargs: Dict[str, Any] = {"ssl_verify": verify_ssl}
@@ -373,11 +376,17 @@ def transcribe_webui(
         )
         if len(result) > 1 and isinstance(result[1], (int, float)):
             audio_duration = float(result[1])
+        # Attempt to capture segment metadata when the response is a list of dicts.
+        if all(isinstance(item, dict) for item in result):
+            metadata["segments"] = result
     elif isinstance(result, dict):
         if "text" in result:
             transcript = result.get("text") or None
         elif "segments" in result:
             transcript = _segments_to_text(result.get("segments")) or None
+        metadata["segments"] = result.get("segments")
+        metadata["model"] = result.get("model") or result.get("model_id")
+        metadata["language"] = result.get("language")
     elif isinstance(result, str):
         transcript = result
 

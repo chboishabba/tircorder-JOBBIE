@@ -108,6 +108,9 @@ Follow these steps to tailor an installation:
        "method": "webui",
        "webui": {
          "base_url": "https://webui.example",
+         "emit_envelope": true,
+         "envelope_dir": "/var/tmp/tircorder/envelopes",
+         "envelope_format": "sb_execution_envelope_v1",
          "username": "operator",
          "password": "s3cret",
          "timeout": 900,
@@ -118,7 +121,10 @@ Follow these steps to tailor an installation:
      }
    }
    ```
-   5. **Persist updates** with `TircorderConfig.set_config({...})`; the helper will
+   5. **Envelope exports**: when `emit_envelope` is true, TiRCorder writes
+      `<audio_stem>.execution_envelope.json` next to the transcript (or under
+      `envelope_dir` if set).
+   6. **Persist updates** with `TircorderConfig.set_config({...})`; the helper will
       create the directory tree if it does not yet exist.
 
 ### WebUI vs. backend APIs

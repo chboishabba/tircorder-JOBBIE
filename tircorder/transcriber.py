@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from queue import Queue
 from typing import Dict, Optional
 
+from .sb_adapter import build_execution_envelope, write_execution_envelope
 from .state import export_queues_and_files, load_state
 from .utils import (
     get_transcription_backend,
@@ -151,6 +152,7 @@ def transcriber(
                     file,
                     base_url=webui_config.get("base_url", ""),
                     options=webui_config.get("options"),
+                    transcribe_path=webui_config.get("transcribe_path", "/_transcribe_file"),
                     timeout=timeout_value,
                     auth=auth_credentials,
                     headers=headers,
@@ -180,6 +182,35 @@ def transcriber(
             try:
                 with open(output_path, "w") as f:
                     f.write(output_text)
+                if transcription_method == "webui" and webui_config.get("emit_envelope"):
+                    transcript_payload = {
+                        "text": output_text,
+                        "model": metadata.get("model"),
+                        "language": metadata.get("language"),
+                        "segments": metadata.get("segments") or [],
+                    }
+                    envelope_payload = build_execution_envelope(
+                        transcript_payload,
+                        source="whisperx_webui",
+                        model=metadata.get("model"),
+                        language=metadata.get("language"),
+                        audio_path=file,
+                        adapter_label="tircorder_whisperx_webui_v1",
+                        envelope_format=webui_config.get(
+                            "envelope_format", "sb_execution_envelope_v1"
+                        ),
+                    )
+                    envelope_dir = webui_config.get("envelope_dir")
+                    envelope_path = (
+                        os.path.join(envelope_dir, os.path.basename(output_path))
+                        if envelope_dir
+                        else output_path
+                    )
+                    envelope_path = (
+                        os.path.splitext(envelope_path)[0]
+                        + ".execution_envelope.json"
+                    )
+                    write_execution_envelope(envelope_path, envelope_payload)
                 end_time = datetime.now()
                 elapsed_time = (end_time - start_time).total_seconds()
                 real_time_factor = (
