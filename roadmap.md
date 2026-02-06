@@ -38,6 +38,7 @@ We welcome ideas and prototypes. Please open a GitHub Discussion or issue with
 | Chat History Integration | Consolidate conversation archives into TiRCorder to enrich context for investigators. | In Progress | [Chat archival plan](docs/twitter_backup.md) |
 | GUI Transition Planning | Finalize interaction design updates for moving from CLI-first flows to the new GUI shell. | Planned | [Interface concepts](docs/visualiser_interface.md) |
 | Data Integrity Audits | Automate checks for dangling transcripts, audio, and calendar entries to prevent analysis gaps. | Planned | [Integrity checklist](check_db_integrity.py) |
+| TextSpan Provenance Alignment | Ensure TiRCorder emits revision-aware span pointers (TextSpan) for any text slices consumed by ITIR/SensibLaw. | Planned | [Provenance model](docs/PROVENANCE.md) |
 
 ## Mid-Term Goals (3-9 months)
 
