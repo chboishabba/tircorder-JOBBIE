@@ -170,6 +170,10 @@ CREATE TABLE actor_external_refs (
 * RDF-oriented
 * Good for definitions, synonyms, infobox fields
 
+**Storage convention (recommended):** store DBpedia IDs as full URIs in
+`external_id` (e.g., `http://dbpedia.org/resource/Westmead_Hospital`). This
+keeps `owl:sameAs` targets valid IRIs in downstream graph exports.
+
 ### ✔️ YAGO
 
 * More strongly typed

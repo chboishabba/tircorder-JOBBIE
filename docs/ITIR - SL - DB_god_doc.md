@@ -2343,7 +2343,10 @@ Inputs: PDFs, images, emails, chat exports
 Produces:
 
 * `documents`
-* OCR fallback
+* OCR fallback (optional)
+  - Local OCR can provide baseline searchability, but handwriting quality is often poor.
+  - Frontier multimodal OCR (e.g., ChatGPT-class) is often better on messy handwriting via context clues, but is a different risk class:
+    explicit opt-in only; treat output as non-authoritative transcription with full provenance; keep the artifact as source-of-truth.
 * text blocks
 * `sentences`
 * `events` (LEGAL_EVENT, INCIDENT, MESSAGE, etc)
@@ -2980,5 +2983,4 @@ flowchart TD
 ---
 
 If you want a **second diagram that includes Layer 1 Events/Actors** (fact-to-law flow: *Event → Harm → ProtectedInterest → WrongType*), I can draft a companion flowchart specifically for the **fact-side pipeline** to sit next to this **law-side pipeline**.
-
 

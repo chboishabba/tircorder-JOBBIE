@@ -8,3 +8,10 @@
 - Added a non-semantic adapter to emit SB execution envelopes plus segment events from WhisperX-WebUI transcripts.
 - Envelope export is controlled via `transcription.webui.emit_envelope` and writes alongside the transcript (or `envelope_dir`).
 - Tests cover provenance, confidence retention, and absence of semantic labels.
+
+## Health export connectors (meta-only by default)
+- Added local-import connectors for health data exports under `integrations/medical/`:
+  - FHIR export ingestion (Bundle/NDJSON) -> story events
+  - scans folder ingestion (DICOM/exported images/PDFs) -> story events
+  - doctor notes folder ingestion (txt/md/pdf refs; optional text for txt/md) -> story events
+- Default posture is meta-only: hashes + file metadata; no base64 attachments or PDF text extraction.
