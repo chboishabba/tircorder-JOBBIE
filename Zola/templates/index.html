@@ -2,7 +2,14 @@
 {% import "partials/timeline_item.html" as timeline %}
 
 {% block content %}
-<div id="timeline" role="list">
-  {{ timeline::timeline_item(audio_symlink="example.mp3", transcript_symlink="example.txt", platform="example", contact="contact", frequency=1) }}
-</div>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<main id="main-content" tabindex="-1">
+  <p id="timeline-instructions" class="sr-only">
+    Use left and right arrow keys to navigate between timeline items.
+    Press Enter to toggle audio details.
+  </p>
+  <div id="timeline" role="list" aria-describedby="timeline-instructions">
+    {{ timeline::timeline_item(audio_symlink="example.mp3", transcript_symlink="example.txt", platform="example", contact="contact", frequency=1) }}
+  </div>
+</main>
 {% endblock content %}

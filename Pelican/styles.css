@@ -17,6 +17,9 @@ body {
 .skip-link:focus {
     top: 0;
 }
+.skip-link:focus-visible {
+    outline: 2px solid #fff;
+}
 
 header {
     background-color: #333;
@@ -85,7 +88,8 @@ h1, h2, h3 {
     border: 0;
 }
 
-.label:focus {
+.label:focus,
+.label:focus-visible {
     outline: 2px solid #000;
 }
 
@@ -93,8 +97,8 @@ h1, h2, h3 {
     background-color: yellow;
 }
 
-.highlight-container {
+.transcript-display {
     margin-top: 10px;
     font-weight: bold;
+    min-height: 1.5em;
 }
-

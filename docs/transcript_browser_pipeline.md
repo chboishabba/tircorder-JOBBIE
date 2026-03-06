@@ -16,11 +16,11 @@ This note explains how the Pelican utilities turn recorded transcripts into the 
 
 ## HTML assembly
 - `generate_html.py` stitches together the header/footer scaffolding with timeline items for each match and dangling lists for unmatched files. The output is written to `content/timeline.html`. 【F:Pelican/generate_html.py†L41-L77】
-- Each timeline item is a `<div>` containing a label that stores `data-audio` and `data-transcript` URLs plus a hidden audio player. The player holds the transcript in a `<pre>` tag and an empty `.transcript-display` container for live highlights. 【F:Pelican/generate_html_matches.py†L7-L30】
+- Each timeline item is a `<div>` containing a label that stores `data-audio` and `data-transcript` URLs plus a hidden audio player. The player holds the transcript in a `<pre>` tag and an empty `.transcript-display` container, configured as an `aria-live` region for the current line. 【F:Pelican/generate_html_matches.py†L7-L30】
 
 ## Browser behavior
 - `scripts.js` wires accessibility and playback behavior. Clicking or pressing Enter on a label toggles the associated audio panel and lazy-loads the source from the `data-src` attribute. Arrow keys jump between timeline items. 【F:Pelican/scripts.js†L23-L65】
-- During playback, `timeupdate` events parse SRT-style timestamps in the transcript, highlight the current line, and mirror the highlighted text into `.transcript-display` so the active caption is obvious. 【F:Pelican/scripts.js†L67-L93】
+- During playback, `timeupdate` events parse SRT-style timestamps in the transcript, highlight the current line, and mirror the active caption into `.transcript-display` so assistive tech announces it. 【F:Pelican/scripts.js†L67-L93】
 - If the environment supports it, a 3D timeline enhancer is loaded after the DOM is ready. 【F:Pelican/scripts.js†L1-L22】【F:Pelican/scripts.js†L95-L99】
 
 ## Running the generator

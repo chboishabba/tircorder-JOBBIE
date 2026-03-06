@@ -49,14 +49,17 @@ def generate_html_timeline_item(
     return (
         f'<div class="timeline-item" role="listitem" '
         f'data-platform="{platform}" data-contact="{contact}"{freq_attr}>'
-        f'<a href="#" class="label" data-audio="symlinks/{encoded_audio}" '
+        f'<a href="#" class="label" aria-describedby="timeline-instructions" '
+        f'data-audio="symlinks/{encoded_audio}" '
         f'data-transcript="symlinks/{encoded_transcript}">{encoded_audio}</a>'
-        '<div class="audio-player" style="display: none;">'
-        "<audio controls>"
+        '<div class="audio-player" style="display: none;" aria-hidden="true">'
+        '<audio controls aria-label="Audio player">'
         f'<source data-src="symlinks/{encoded_audio}" type="audio/mpeg">'
         "</audio>"
-        f"<pre>{transcript_content}</pre>"
-        '<div class="highlight-container"></div>'
+        f'<pre aria-label="Transcript">{transcript_content}</pre>'
+        '<div class="transcript-display" role="status" '
+        'aria-live="polite" aria-atomic="true" '
+        'aria-label="Current transcript line"></div>'
         "</div>"
         "</div>"
     )

@@ -41,18 +41,21 @@ def test_build_client_command_with_device_id():
     module = load_launcher_module()
 
     cmd = module.build_client_command(
-        device_id=3, output_dir="outdir", webui_url="http://x"
+        device_id=3, output_dir="outdir", webui_url="http://x", webui_path="/foo"
     )
 
     assert "--device-id" in cmd and "3" in cmd
     assert "--output-dir" in cmd and "outdir" in cmd
     assert "--webui-url" in cmd and "http://x" in cmd
+    assert "--webui-path" in cmd and "/foo" in cmd
 
 
 def test_build_server_command_with_data_dir():
     module = load_launcher_module()
 
-    cmd = module.build_server_command("srv.py", data_dir="/tmp/data")
+    cmd = module.build_server_command(
+        "srv.py", data_dir="/tmp/data", webui_url=None, webui_path=None
+    )
 
     assert cmd[:2] == [module.sys.executable, "srv.py"]
     assert "--data-dir" in cmd and "/tmp/data" in cmd

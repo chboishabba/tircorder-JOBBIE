@@ -38,7 +38,7 @@ transcription_method = 'ctranslate2'
 
 
 #ctranslate2_model_path = "/home/c/Documents/TiRCORDER - BETA 'jobbie'/faster-whisper-medium-en"
-model = WhisperModel("medium.en", device="cpu", compute_type="int8")
+model = None
 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 #translator = ctranslate2.Translator(ctranslate2_model_path)
 # Choose transcription method: 'python_whisper' or 'ctranslate2'
@@ -221,6 +221,12 @@ def transcriber(base_directory, webui_url=None, webui_path="/_transcribe_file"):
             )
             if output_text is None:
                 logging.error(f"WebUI transcription failed for {file}: {metadata.get('error')}")
+                audio_duration = 0.0
+            if not audio_duration:
+                try:
+                    audio_duration = librosa.get_duration(path=file_path)
+                except Exception:
+                    audio_duration = 0.0
         elif transcription_method == 'python_whisper':
             output_text, audio_duration = transcribe_audio(file)
         elif transcription_method == 'ctranslate2':
@@ -241,7 +247,10 @@ def transcriber(base_directory, webui_url=None, webui_path="/_transcribe_file"):
                     f.write(output_text)
                 end_time = datetime.now()
                 elapsed_time = (end_time - start_time).total_seconds()
-                real_time_factor = audio_duration / elapsed_time if elapsed_time > 0 else 0
+                if audio_duration and elapsed_time > 0:
+                    real_time_factor = audio_duration / elapsed_time
+                else:
+                    real_time_factor = 0
                 logging.info(f"SYSTIME: {end_time.strftime('%Y-%m-%d %H:%M:%S')} | Transcription completed and saved for {file}. Real-time factor: {real_time_factor:.2f}x.")
             except PermissionError as e:
                 logging.error(f"Permission denied while saving transcription for {file}: {e}")
@@ -253,6 +262,7 @@ def transcriber(base_directory, webui_url=None, webui_path="/_transcribe_file"):
             logging.error(f"Transcription failed for {file}.")
 
         CONVERT_QUEUE.put(file)
+        transcription_complete.set()
         
         # Calculate processing rates
         now = datetime.now()
@@ -330,7 +340,10 @@ def transcribe_ct2_nonpythonic(input_path):
 
 
 def transcribe_ct2(file_path):
+    global model
     try:
+        if model is None:
+            model = WhisperModel("medium.en", device="cpu", compute_type="int8")
         # Load and preprocess the audio
         audio, _ = librosa.load(file_path, sr=16000, mono=True)
 

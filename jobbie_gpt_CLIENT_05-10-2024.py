@@ -188,7 +188,11 @@ def continuous_record(
 
     try:
         while True:
-            frame = stream.read(chunk_size)
+            try:
+                frame = stream.read(chunk_size, exception_on_overflow=False)
+            except OSError as exc:
+                print(Fore.RED + f"Audio read error (overflow): {exc}")
+                continue
             is_speech = vad.is_speech(frame, rate)
             now = datetime.datetime.now()
             audio_data.append(frame)
@@ -241,8 +245,15 @@ def continuous_record(
             else:
                 print(f"Timer: {countdown_timer:.2f}s remaining", end='          \r')
     finally:
-        stream.stop_stream()
-        stream.close()
+        try:
+            if stream.is_active():
+                stream.stop_stream()
+        except Exception:
+            pass
+        try:
+            stream.close()
+        except Exception:
+            pass
         p.terminate()
         print("\nRecording stopped.")
 
@@ -376,7 +387,7 @@ def main():
     parser.add_argument(
         "--device-id",
         type=int,
-        help="Input device id for microphone capture (defaults to first input)",
+        help="Logical device id (default maps to preferred/default input)",
     )
     parser.add_argument(
         "--output-dir",
@@ -400,27 +411,51 @@ def main():
 
     print("Available recording devices:")
     p = pyaudio.PyAudio()
-    input_devices = []
-    for i in range(p.get_device_count()):
-        dev = p.get_device_info_by_index(i)
+    discovered_devices = []
+    default_actual_id = None
+    for actual_id in range(p.get_device_count()):
+        dev = p.get_device_info_by_index(actual_id)
         if dev["maxInputChannels"] > 0:
-            input_devices.append(i)
-            print(f"Device ID {i}: {dev['name']}")
+            name = dev["name"]
+            if name.lower() == "default":
+                default_actual_id = actual_id
+            discovered_devices.append((actual_id, name))
 
-    if not input_devices:
+    # Build logical ordering with "default" as logical 0 when present.
+    ordered_devices = []
+    if default_actual_id is not None:
+        ordered_devices.append(
+            (0, default_actual_id, "default")
+        )
+    logical_index = 1 if ordered_devices else 0
+    for actual_id, name in discovered_devices:
+        if actual_id == default_actual_id:
+            continue
+        ordered_devices.append((logical_index, actual_id, name))
+        logical_index += 1
+
+    if not ordered_devices:
         print(Fore.RED + "No input devices detected.")
         p.terminate()
         return
 
-    device_id = args.device_id if args.device_id is not None else input_devices[0]
-    if device_id not in input_devices:
+    print("Logical device list (use these IDs with --device-id):")
+    for logical_id, actual_id, name in ordered_devices:
+        print(f"  {logical_id}: {name} (actual id {actual_id})")
+
+    # Resolve logical id to actual PyAudio id.
+    logical_to_actual = {logical_id: actual_id for logical_id, actual_id, _ in ordered_devices}
+    chosen_logical = args.device_id if args.device_id is not None else 0
+    if chosen_logical not in logical_to_actual:
+        available_ids = ", ".join(str(lid) for lid in logical_to_actual.keys())
         print(
             Fore.RED
-            + "Invalid device id "
-            f"{device_id}. Available: {', '.join(map(str, input_devices))}"
+            + f"Invalid logical device id {chosen_logical}. Available: {available_ids}"
         )
         p.terminate()
         return
+
+    device_id = logical_to_actual[chosen_logical]
 
     p.terminate()
     continuous_record(
