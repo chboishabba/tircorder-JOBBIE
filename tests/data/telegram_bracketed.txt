@@ -1,0 +1,8 @@
+[5/3/26 8:50 pm] Dave: Thanks for the feedback. I will try an approach that allows for more interpretation, avoiding statements with binary truth assessments
+[6/3/26 10:00 am] Kalli Mathios: https://netflixtechblog.com/uda-unified-data-architecture-6a6aee261d8d 👀
+[6/3/26 10:40 am] chb: Netflix UDA assumes the conceptual model is correct and projects it to schemas. The DASHI/SensibLaw approach looks one layer earlier: it treats semantic structure itself as the invariant that emerges from epistemic evidence dynamics.
+[6/3/26 10:42 am] chb: Wikidata already stores multi-dimensional evidence through references, qualifiers, and statement ranks. These fields implicitly encode an epistemic lattice over claims.
+[7/3/26 12:56 am] [[wikilinksbot]]: Q21169592 (https://www.wikidata.org/entity/Q21169592) – Na(+)-translocating NADH-quinone reductase subunit A CTL0002
+[7/3/26 2:00 am] chb: #AI
+
+We’re in a good position now. The bounded P31/P279 phase is proven, the qualifier-drift phase is live.
