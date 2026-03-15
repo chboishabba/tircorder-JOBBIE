@@ -39,6 +39,7 @@ We welcome ideas and prototypes. Please open a GitHub Discussion or issue with
 | GUI Transition Planning | Finalize interaction design updates for moving from CLI-first flows to the new GUI shell. | Planned | [Interface concepts](docs/visualiser_interface.md) |
 | Data Integrity Audits | Automate checks for dangling transcripts, audio, and calendar entries to prevent analysis gaps. | Planned | [Integrity checklist](check_db_integrity.py) |
 | TextSpan Provenance Alignment | Ensure TiRCorder emits revision-aware span pointers (TextSpan) for any text slices consumed by ITIR/SensibLaw. | Planned | [Provenance model](docs/PROVENANCE.md) |
+| Shared SL Reducer Adoption | Route TiRC transcript/capture text through `sensiblaw.interfaces.shared_reducer` for canonical lexeme/structure refs while keeping TiRC non-authoritative and avoiding a competing canonical NLP layer. | Planned | `../SensibLaw/src/sensiblaw/interfaces/shared_reducer.py` |
 
 ## Mid-Term Goals (3-9 months)
 
