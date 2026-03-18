@@ -123,6 +123,26 @@ def transcribe_and_log(filename, start_timestamp, webui_url, webui_path):
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"{timestamp} ({duration:.2f}s) - {transcript}\n"
 
+        # --- Adapter for SL shared reducer ---
+        try:
+            import os
+            import sys
+            _SUITE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            _SENSIBLAW_ROOT = os.path.join(_SUITE_ROOT, "SensibLaw")
+            _SENSIBLAW_SRC = os.path.join(_SENSIBLAW_ROOT, "src")
+            if _SENSIBLAW_ROOT not in sys.path:
+                sys.path.insert(0, _SENSIBLAW_ROOT)
+            if _SENSIBLAW_SRC not in sys.path:
+                sys.path.insert(0, _SENSIBLAW_SRC)
+            from sensiblaw.interfaces.shared_reducer import collect_canonical_lexeme_occurrences
+            
+            canonical_ids = [occ.norm_text for occ in collect_canonical_lexeme_occurrences(transcript)]
+            if canonical_ids:
+                log_entry = f"{timestamp} ({duration:.2f}s) [SL_CANONICAL_IDS: {','.join(canonical_ids)}] - {transcript}\n"
+        except ImportError:
+            pass
+        # -------------------------------------
+
         log_file_path = os.path.join(os.path.dirname(filename), "transcriptions.log")
         with open(log_file_path, "a") as log_file:
             log_file.write(log_entry)
