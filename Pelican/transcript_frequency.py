@@ -1,9 +1,12 @@
-"""Utilities for estimating transcript word frequencies.
+"""Legacy transcript-browser utilities for estimating transcript word frequencies.
 
 This module provides a helper to compute a simple frequency metric for a
 transcript based on noun detection. When the ``nltk`` package is available,
 part-of-speech tagging is used to count noun tokens. Otherwise a fallback
 heuristic filters out common stop words and counts remaining tokens.
+
+The logic remains in-tree as migration/reference material while web-facing
+behavior moves to ``itir-svelte/``.
 """
 
 from __future__ import annotations

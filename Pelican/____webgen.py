@@ -1,9 +1,15 @@
+"""Legacy Pelican site runner kept only for reference during migration.
+
+Do not invest new product-facing web work here. Port any retained behavior to
+`itir-svelte/`, which is the sole intended web interface.
+"""
+
 import subprocess
 import os
 import shutil
 import time
 
-# Define the paths to your scripts
+# Legacy helper sequence for the old transcript-browser build.
 scripts = [
     "dir_traversal.py",
     "match_audio_transcript.py",
@@ -27,7 +33,7 @@ else:
     print("timeline.html not found. Please check generate_html.py for issues.")
     exit(1)
 
-# Run Pelican to generate the site
+# Run Pelican to generate the old site only when inspecting legacy behavior.
 try:
     subprocess.run(["pelican", "content", "-o", "output", "-s", "pelicanconf.py"], check=True)
     print("Pelican content generation successful.")
@@ -69,4 +75,3 @@ try:
         server.terminate()
 except subprocess.CalledProcessError as e:
     print(f"Error starting the HTTP server: {e}")
-

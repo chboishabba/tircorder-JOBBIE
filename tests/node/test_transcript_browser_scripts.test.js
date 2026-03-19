@@ -1,6 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
+// Legacy transcript-browser regression coverage only. New UI work belongs in
+// `itir-svelte/`; this suite just keeps reference behavior inspectable while
+// the migration remains incomplete.
 const transcriptUi = require("../../Pelican/scripts.js");
 
 test("parseSrtTimestamp parses valid SRT timestamps", () => {

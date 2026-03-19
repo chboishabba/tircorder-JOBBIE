@@ -1,4 +1,8 @@
-"""Helpers for building timeline HTML blocks."""
+"""Legacy helpers for building transcript-browser HTML blocks.
+
+These utilities are kept as reference during the migration to
+`itir-svelte/`, which is the sole intended web interface going forward.
+"""
 
 from __future__ import annotations
 

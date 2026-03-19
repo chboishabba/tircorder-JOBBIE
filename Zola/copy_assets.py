@@ -1,6 +1,8 @@
-"""Copy audio and transcript files into the Zola static directory.
+"""Legacy asset copier for the old Zola transcript-browser build.
 
-This replaces the symlink generation used by the Pelican build.
+This replaces the symlink generation used by the Pelican build, but Zola is
+also now retained only as reference while `itir-svelte/` becomes the sole web
+interface.
 """
 
 from __future__ import annotations

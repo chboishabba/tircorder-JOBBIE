@@ -2,6 +2,7 @@ from Pelican.generate_html_timeline_item import generate_html_timeline_item
 
 
 def test_generate_html_timeline_item_without_frequency(tmp_path):
+    """Keep a bounded regression on the legacy Pelican HTML contract."""
     transcript = tmp_path / "sample.txt"
     transcript.write_text("hello world")
 

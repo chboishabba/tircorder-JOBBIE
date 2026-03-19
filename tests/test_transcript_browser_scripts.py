@@ -1,4 +1,4 @@
-"""Run JavaScript unit tests for transcript browser interactions."""
+"""Keep bounded JS regression coverage on the legacy transcript-browser helpers."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 
 
 def test_transcript_browser_scripts_unit_suite() -> None:
-    """Validate transcript highlight and seek behavior in browser script helpers."""
+    """Validate retained legacy behavior while the UI migrates to `itir-svelte/`."""
 
     node_binary = shutil.which("node")
     if node_binary is None:
