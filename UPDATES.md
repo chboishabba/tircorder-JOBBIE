@@ -1,5 +1,14 @@
 # Update Log
 
+## Web surface transition
+- Clarified repo direction: `itir-svelte/` is the sole intended web interface
+  for ITIR-suite going forward.
+- `Pelican/` and `Zola/` remain in `tircorder-JOBBIE/` only as
+  legacy/reference material during migration.
+- New product-facing web behavior should be implemented in `itir-svelte/`,
+  with legacy helpers retained only long enough to port or verify behavior
+  before deletion.
+
 ## Scanner and state handling
 - Scanner now records each discovered file in the database and queues its ID for downstream work, preventing mismatched references.
 - State loading reconstructs the known-files cache from folder paths and filenames so change detection remains reliable.

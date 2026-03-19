@@ -22,7 +22,11 @@ try:  # pragma: no cover - exercised via functional tests
     try:  # ensure tagger is available
         nltk.data.find("taggers/averaged_perceptron_tagger_eng")
     except LookupError:  # download silently if missing
-        nltk.download("averaged_perceptron_tagger_eng", quiet=True)
+        try:
+            nltk.download("averaged_perceptron_tagger_eng", quiet=True)
+            nltk.data.find("taggers/averaged_perceptron_tagger_eng")
+        except Exception:
+            _HAS_NLTK = False
 except Exception:  # pragma: no cover - if nltk is missing
     _HAS_NLTK = False
 

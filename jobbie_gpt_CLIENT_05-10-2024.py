@@ -7,7 +7,17 @@ import audioop
 import threading
 import subprocess
 import os
-from colorama import Fore, Style, init
+try:
+    from colorama import Fore, Style, init
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    class _NoColor:
+        def __getattr__(self, _name: str) -> str:
+            return ""
+
+    Fore = Style = _NoColor()
+
+    def init(*_args, **_kwargs) -> None:  # type: ignore[no-redef]
+        return None
 import json
 import curses
 import socket

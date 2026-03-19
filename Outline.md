@@ -31,7 +31,10 @@ Rate limiting
 RateLimiter slows scans exponentially when no new files appear, preventing constant polling
 
 File matching & web output
-db_match_audio_transcript.py records which audio files have transcripts, and the Pelican scripts (e.g., generate_html.py) produce HTML pages summarizing matches and “dangling” files
+db_match_audio_transcript.py records which audio files have transcripts. The
+older `Pelican/` scripts are still kept as reference for legacy HTML output,
+but they are no longer the intended web interface direction; new web work
+should target `itir-svelte/`.
 
 Example client
 jobbie_client_dual-capture.py demonstrates capturing microphone and system audio simultaneously, using WebRTC VAD to detect speech and trigger pauses in recording or to assist in noise removal, as well as recording of, for example, psychologist meetings etc.
@@ -50,7 +53,8 @@ Key Concepts to Understand
 
     ffmpeg integration – Conversion steps rely on ffmpeg; ensure it’s installed and paths are correct.
 
-    HTML generation – The Pelican scripts can be extended for richer visualization or web publishing.
+    Legacy HTML generation – `Pelican/` remains useful as reference while web
+    behavior is ported into `itir-svelte/`.
 
 Next Steps for Learning
 
@@ -60,7 +64,8 @@ Next Steps for Learning
 
     Customize recording directories via the database, then run the scanner/transcriber pipeline to see the full flow.
 
-    Extend Pelican HTML output for user-facing timelines or dashboards.
+    Port any still-needed transcript/timeline browser behavior into
+    `itir-svelte/` instead of extending Pelican/Zola.
 
     Explore client/server separation if running capture clients on multiple machines that feed a centralized server.
 

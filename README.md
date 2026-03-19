@@ -164,13 +164,15 @@ We warmly welcome contributions.
 - [Interface and visualisation sketches](docs/visualiser_interface.md)
 
 ## Accessibility
-The generated web interface uses semantic HTML, a skip-navigation link, and
-ARIA list semantics for timeline items. Timeline labels expose expanded/collapsed
-state, and the current transcript line is announced via an `aria-live` region
-as audio plays. Visible focus outlines support keyboard navigation. We document
-implemented accessibility tools and the TODO roadmap in
+Legacy transcript-browser helpers under `Pelican/` and `Zola/` use semantic
+HTML, a skip-navigation link, and ARIA list semantics for timeline items.
+Those stacks are now retained only as reference material while the suite
+transitions to `itir-svelte/` as the sole web interface. Timeline labels expose
+expanded/collapsed state, and the current transcript line is announced via an
+`aria-live` region as audio plays. Visible focus outlines support keyboard
+navigation. We document implemented accessibility tools and the TODO roadmap in
 [accessibility.md](accessibility.md) and welcome community feedback as we work
-toward WCAG 2.1 AA compliance.
+toward WCAG 2.1 AA compliance.
 
 ## License
 ITIR and TiRCorder are products of TFYQA.biz provided under the

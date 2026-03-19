@@ -57,6 +57,7 @@ def generate_html_timeline_item(
         f'<source data-src="symlinks/{encoded_audio}" type="audio/mpeg">'
         "</audio>"
         f'<pre aria-label="Transcript">{transcript_content}</pre>'
+        '<div class="highlight-container"></div>'
         '<div class="transcript-display" role="status" '
         'aria-live="polite" aria-atomic="true" '
         'aria-label="Current transcript line"></div>'

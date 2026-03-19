@@ -18,7 +18,7 @@ def test_generate_html_timeline_item_without_frequency(tmp_path):
     assert 'data-contact="Alice"' in html
     assert '<source data-src="symlinks/audio.mp3" type="audio/mpeg">' in html
     assert '<div class="highlight-container"></div>' in html
-    assert "<pre>hello world</pre>" in html
+    assert '<pre aria-label="Transcript">hello world</pre>' in html
 
 
 def test_generate_html_timeline_item_with_frequency(tmp_path):

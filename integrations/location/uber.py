@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -63,10 +63,13 @@ class UberConnector:
         if not self.access_token:
             raise RuntimeError("authenticate() must be called first")
 
+        start_ts = self._to_unix_seconds(start_time)
+        end_ts = self._to_unix_seconds(end_time)
+
         headers = {"Authorization": f"Bearer {self.access_token}"}
         params = {
-            "start_time": int(start_time.timestamp()),
-            "end_time": int(end_time.timestamp()),
+            "start_time": start_ts,
+            "end_time": end_ts,
         }
         response = requests.get(TRIPS_URL, headers=headers, params=params, timeout=10)
         response.raise_for_status()
@@ -82,6 +85,17 @@ class UberConnector:
         return events
 
     # ------------------------------------------------------------------
+    @staticmethod
+    def _to_unix_seconds(value: datetime) -> int:
+        """Convert a datetime to Unix seconds, treating naive values as UTC."""
+
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        else:
+            value = value.astimezone(timezone.utc)
+        return int(value.timestamp())
+
+    # ------------------------------------------------------------------
     def _trip_to_event(
         self, trip: Dict[str, Any], headers: Dict[str, str]
     ) -> Dict[str, Any]:
@@ -90,8 +104,8 @@ class UberConnector:
         pickup = trip["pickup"]
         dropoff = trip["dropoff"]
         event: Dict[str, Any] = {
-            "pickup_time": datetime.fromtimestamp(trip["start_time"]),
-            "dropoff_time": datetime.fromtimestamp(trip["end_time"]),
+            "pickup_time": datetime.fromtimestamp(trip["start_time"], tz=timezone.utc),
+            "dropoff_time": datetime.fromtimestamp(trip["end_time"], tz=timezone.utc),
             "pickup_location": {
                 "lat": pickup["latitude"],
                 "lng": pickup["longitude"],

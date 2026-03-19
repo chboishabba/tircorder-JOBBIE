@@ -1,6 +1,9 @@
 # Transcript Browser Website Logic
 
-This note explains how the Pelican utilities turn recorded transcripts into the clickable web experience (audio player, transcript browser, and seek-on-click interactions).
+This note records the legacy Pelican transcript-browser pipeline for reference
+while ITIR transitions to `itir-svelte/` as the sole web interface. Do not use
+this document as the spec for new product-facing web work; port any still-useful
+behavior into Svelte instead.
 
 ## Inputs and discovery
 - The scanner reads the list of source folders from `folders_file.json` and traverses each directory for known audio (`.wav`, `.flac`, `.mp3`, `.ogg`) and transcript (`.srt`, `.txt`, `.vtt`, `.json`, `.tsv`) extensions. It writes the current inventory to `traversal_results.json` so subsequent runs can reuse the snapshot. 【F:Pelican/generate_html.py†L1-L37】【F:Pelican/dir_traversal.py†L5-L39】
@@ -23,5 +26,7 @@ This note explains how the Pelican utilities turn recorded transcripts into the 
 - During playback, `timeupdate` events parse SRT-style timestamps in the transcript, highlight the current line, and mirror the active caption into `.transcript-display` so assistive tech announces it. 【F:Pelican/scripts.js†L67-L93】
 - If the environment supports it, a 3D timeline enhancer is loaded after the DOM is ready. 【F:Pelican/scripts.js†L1-L22】【F:Pelican/scripts.js†L95-L99】
 
-## Running the generator
-Run `python Pelican/generate_html.py` from the repository root after updating `folders_file.json` with your recording directories. The script refreshes symlinks and regenerates `content/timeline.html`, which you can serve as a static page alongside the bundled CSS/JS assets.
+## Legacy status
+`Pelican/` remains in-tree only as a migration/reference surface. Avoid adding
+new runtime UI work here. If a behavior is still needed, capture the contract
+and move it into `itir-svelte/`.

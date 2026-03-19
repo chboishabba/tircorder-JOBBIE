@@ -1,3 +1,7 @@
+import pytest
+
+pytest.importorskip("plotly")
+
 from visualisation.sankey_render import AccountStyle, Flow, render_sankey
 
 

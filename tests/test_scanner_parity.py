@@ -2,6 +2,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from tircorder.scanner import scan_directories
 
 
@@ -52,7 +54,15 @@ def test_scanner_parity(tmp_path):
     for path, ignore_t, ignore_c in dirs:
         cmd.extend([path, "1" if ignore_t else "0", "1" if ignore_c else "0"])
     repo_root = Path(__file__).resolve().parents[1]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=repo_root)
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=True, cwd=repo_root
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").lower()
+        if "could not resolve host" in stderr or "could not resolve hostname" in stderr:
+            pytest.skip("cargo deps unavailable (offline build); rerun with network/cached crates")
+        raise
     rust_transcribe = []
     rust_convert = []
     for line in result.stdout.strip().splitlines():
