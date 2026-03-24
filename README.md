@@ -108,12 +108,30 @@ Follow these steps to tailor an installation:
        "method": "webui",
        "webui": {
          "base_url": "https://webui.example",
+         "protocol": "backend",
          "emit_envelope": true,
          "envelope_dir": "/var/tmp/tircorder/envelopes",
          "envelope_format": "sb_execution_envelope_v1",
          "username": "operator",
          "password": "s3cret",
          "timeout": 900,
+         "backend": {
+           "submit_path": "/transcription",
+           "task_path_template": "/task/{identifier}",
+           "poll_interval_seconds": 3.0,
+           "max_polls": 120
+         },
+         "downstream": {
+           "persist_raw_transcript": true,
+           "sensiblaw": {
+             "enabled": true,
+             "storage_path": "/abs/path/to/tircorder_whisperx.db"
+           },
+           "statibaker": {
+             "enabled": true,
+             "log_root": "/abs/path/to/StatiBaker/runs"
+           }
+         },
          "options": {
            "temperature": 0.1
          }
@@ -121,9 +139,12 @@ Follow these steps to tailor an installation:
      }
    }
    ```
-   5. **Envelope exports**: when `emit_envelope` is true, TiRCorder writes
-      `<audio_stem>.execution_envelope.json` next to the transcript (or under
-      `envelope_dir` if set).
+   5. **Artifacts and fan-out**:
+      - `<audio_stem>.whisperx_transcript.json` stores the normalized WhisperX-style transcript.
+      - `<audio_stem>.execution_envelope.json` stores the SB-ready execution envelope.
+      - `<audio_stem>.downstream_receipts.json` records SensibLaw/StatiBaker sink results.
+      - When `downstream.sensiblaw.enabled` is true, TiRCorder imports the transcript into the configured SensibLaw SQLite store.
+      - When `downstream.statibaker.enabled` is true, TiRCorder appends a transcription activity event under `runs/<date>/logs/transcription/<date>.jsonl`.
    6. **Persist updates** with `TircorderConfig.set_config({...})`; the helper will
       create the directory tree if it does not yet exist.
 
@@ -136,6 +157,8 @@ Follow these steps to tailor an installation:
   instead: `POST /transcription` enqueues work and returns an identifier,
   `GET /task/{identifier}` reports status/results, and background-music
   separation downloads are available via `GET /task/file/{identifier}`.
+- TiRCorder now supports both modes. Set `transcription.webui.protocol` to
+  `backend` for the queued API or `gradio` for the synchronous endpoint.
 
 ## Roadmap & Vision
 Explore the long-term strategy, release themes, and community priorities in the

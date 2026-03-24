@@ -38,12 +38,19 @@ Segment event fields (each `type: audio_segment`):
 
 ## Configuration
 Set these under `transcription.webui` in the TiRCorder config:
+- `protocol` (`backend` or `gradio`): selects the queued FastAPI API or the synchronous Gradio API.
 - `emit_envelope` (bool): enable envelope export
 - `envelope_dir` (string|null): optional output directory
 - `envelope_format` (string): defaults to `sb_execution_envelope_v1`
+- `backend.submit_path` / `backend.task_path_template`: queued API routes when `protocol=backend`
+- `downstream.persist_raw_transcript` (bool): write `<audio_stem>.whisperx_transcript.json`
+- `downstream.sensiblaw.enabled` + `downstream.sensiblaw.storage_path`: direct SensibLaw ingest target
+- `downstream.statibaker.enabled` + `downstream.statibaker.log_root`: append-only StatiBaker transcription log target
 
 When enabled, TiRCorder writes:
+- `<audio_stem>.whisperx_transcript.json`
 - `<audio_stem>.execution_envelope.json`
+- `<audio_stem>.downstream_receipts.json`
 
 If `envelope_dir` is unset, the file is written alongside the `.txt` transcript.
 
@@ -56,4 +63,3 @@ If `envelope_dir` is unset, the file is written alongside the `.txt` transcript.
 - Provenance is present.
 - Segment confidence is retained.
 - No semantic labels are emitted.
-

@@ -206,6 +206,15 @@ def transcriber(
         logging.info(f"Processing audio with duration {audio_duration:.3f}s")
 
         if output_text is not None:
+            if transcription_method == "webui" and not metadata.get("is_final", True):
+                logging.info(
+                    "Received non-final WhisperX-WebUI update for %s (session=%s, sequence=%s); skipping transcript persistence until final output.",
+                    file,
+                    metadata.get("session_id"),
+                    metadata.get("sequence"),
+                )
+                TRANSCRIBE_QUEUE.task_done()
+                continue
             output_path = os.path.splitext(file)[0] + ".txt"
             try:
                 with open(output_path, "w") as f:

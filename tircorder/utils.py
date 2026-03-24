@@ -432,6 +432,10 @@ def _normalize_webui_result(
         "model": None,
         "language": None,
         "task_id": task_id,
+        "session_id": task_id,
+        "is_final": True,
+        "sequence": None,
+        "partial_updates": [],
         "protocol": protocol,
         "raw_result": result,
         "raw_status": raw_status,
@@ -457,6 +461,20 @@ def _normalize_webui_result(
         metadata["segments"] = result.get("segments")
         metadata["model"] = result.get("model") or result.get("model_id")
         metadata["language"] = result.get("language")
+        metadata["session_id"] = (
+            result.get("session_id")
+            or result.get("sessionId")
+            or metadata["session_id"]
+        )
+        if "is_final" in result or "final" in result:
+            metadata["is_final"] = bool(result.get("is_final", result.get("final")))
+        metadata["sequence"] = result.get("sequence", result.get("seq"))
+        metadata["partial_updates"] = list(
+            result.get("partial_updates")
+            or result.get("partials")
+            or result.get("updates")
+            or []
+        )
         if isinstance(result.get("audio_duration"), (int, float)):
             audio_duration = float(result["audio_duration"])
     elif isinstance(result, str):
@@ -539,6 +557,10 @@ def _transcribe_webui_backend(
                         "model": None,
                         "language": None,
                         "task_id": task_id,
+                        "session_id": task_id,
+                        "is_final": True,
+                        "sequence": None,
+                        "partial_updates": [],
                         "protocol": "backend",
                         "raw_result": None,
                         "raw_status": last_status,
@@ -562,6 +584,10 @@ def _transcribe_webui_backend(
             "model": None,
             "language": None,
             "task_id": None,
+            "session_id": None,
+            "is_final": True,
+            "sequence": None,
+            "partial_updates": [],
             "protocol": "backend",
             "raw_result": None,
             "raw_status": None,
@@ -649,6 +675,10 @@ def transcribe_webui(
             {
                 "error": str(exc),
                 "task_id": None,
+                "session_id": None,
+                "is_final": True,
+                "sequence": None,
+                "partial_updates": [],
                 "protocol": "gradio",
                 "raw_result": None,
                 "raw_status": None,

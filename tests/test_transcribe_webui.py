@@ -48,6 +48,27 @@ class _RejectTimeoutClient:
         return ["recovered", 7.5]
 
 
+class _LiveMetadataClient:
+    def __init__(self, base_url: str, **kwargs: Any) -> None:
+        self.base_url = base_url
+        self.init_kwargs = kwargs
+
+    def predict(self, **_kwargs: Any):
+        return {
+            "text": "partial hello",
+            "segments": [{"text": "partial hello", "start": 0.0, "end": 0.5}],
+            "model": "live-model",
+            "language": "en",
+            "session_id": "session-7",
+            "is_final": False,
+            "sequence": 3,
+            "partial_updates": [
+                {"sequence": 1, "text": "par"},
+                {"sequence": 2, "text": "partial"},
+            ],
+        }
+
+
 class _FakeResponse:
     def __init__(self, payload: Dict[str, Any], status_code: int = 200) -> None:
         self._payload = payload
@@ -237,6 +258,29 @@ def test_transcribe_webui_backend_success(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert post_kwargs["data"]["whisper_hotwords"] == "[\"alpha\", \"beta\"]"
     get_url, _get_kwargs = session.gets[0]
     assert get_url == "http://webui.local/task/task-123"
+
+
+def test_transcribe_webui_carries_live_session_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    monkeypatch.setattr("tircorder.utils.Client", _LiveMetadataClient)
+    monkeypatch.setattr("tircorder.utils.handle_file", lambda path: f"handled:{path}")
+
+    audio_file = tmp_path / "audio.wav"
+    audio_file.write_bytes(b"RIFF")
+
+    transcript, duration, metadata = transcribe_webui(
+        str(audio_file),
+        base_url="http://webui.local",
+    )
+
+    assert transcript == "partial hello"
+    assert duration == 0.0
+    assert metadata["session_id"] == "session-7"
+    assert metadata["is_final"] is False
+    assert metadata["sequence"] == 3
+    assert metadata["partial_updates"][0]["sequence"] == 1
+    assert metadata["transcript_payload"]["text"] == "partial hello"
 
 
 def test_get_transcription_backend_merges_defaults() -> None:
