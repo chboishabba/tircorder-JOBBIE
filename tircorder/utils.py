@@ -4,13 +4,16 @@ import os
 import sqlite3
 import subprocess
 import time
-from datetime import datetime
+from copy import deepcopy
+from datetime import datetime, timezone
 from os.path import join
 from queue import Queue
 from threading import Event, Lock
 from typing import Any, Dict, Optional, Tuple
+from urllib.parse import urljoin
 
 import librosa
+import requests
 from gradio_client import Client, handle_file
 
 from tircorder.interfaces.config import TircorderConfig
@@ -19,7 +22,14 @@ from tircorder.interfaces.config import TircorderConfig
 DEFAULT_TRANSCRIPTION_METHOD = "ctranslate2"
 DEFAULT_WEBUI_CONFIG: Dict[str, Any] = {
     "base_url": "http://localhost:7860",
+    "protocol": "gradio",
     "transcribe_path": "/_transcribe_file",
+    "backend": {
+        "submit_path": "/transcription",
+        "task_path_template": "/task/{identifier}",
+        "poll_interval_seconds": 3.0,
+        "max_polls": 120,
+    },
     "options": {
         "input_folder_path": "",
         "include_subdirectory": False,
@@ -92,7 +102,33 @@ DEFAULT_WEBUI_CONFIG: Dict[str, Any] = {
     "emit_envelope": False,
     "envelope_dir": None,
     "envelope_format": "sb_execution_envelope_v1",
+    "downstream": {
+        "persist_raw_transcript": True,
+        "sensiblaw": {
+            "enabled": False,
+            "storage_path": None,
+        },
+        "statibaker": {
+            "enabled": False,
+            "log_root": None,
+        },
+    },
 }
+
+
+def _deep_merge_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge nested dictionaries while preserving unspecified defaults."""
+
+    merged = deepcopy(base)
+    for key, value in override.items():
+        if (
+            isinstance(value, dict)
+            and isinstance(merged.get(key), dict)
+        ):
+            merged[key] = _deep_merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
 
 
 def get_transcription_backend(
@@ -118,7 +154,7 @@ def get_transcription_backend(
 
     if method == "webui":
         configured = transcription_config.get("webui", {})
-        merged = {**DEFAULT_WEBUI_CONFIG, **configured}
+        merged = _deep_merge_dicts(DEFAULT_WEBUI_CONFIG, configured)
         return method, merged
 
     return method, transcription_config.get(method, {})
@@ -374,23 +410,207 @@ def _segments_to_text(segments: Any) -> str:
     return "\n".join(lines).strip()
 
 
+def _join_base_url(base_url: str, path: str) -> str:
+    if not path:
+        return base_url
+    base = base_url.rstrip("/") + "/"
+    return urljoin(base, path.lstrip("/"))
+
+
+def _normalize_webui_result(
+    result: Any,
+    *,
+    protocol: str,
+    task_id: Optional[str] = None,
+    raw_status: Optional[Dict[str, Any]] = None,
+) -> Tuple[Optional[str], float, Dict[str, Any]]:
+    """Normalize Gradio and backend responses to one metadata shape."""
+
+    metadata: Dict[str, Any] = {
+        "error": None,
+        "segments": None,
+        "model": None,
+        "language": None,
+        "task_id": task_id,
+        "protocol": protocol,
+        "raw_result": result,
+        "raw_status": raw_status,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    transcript: Optional[str] = None
+    audio_duration = 0.0
+
+    if isinstance(result, (list, tuple)) and result:
+        transcript_candidate = result[0]
+        transcript = (
+            str(transcript_candidate) if transcript_candidate is not None else None
+        )
+        if len(result) > 1 and isinstance(result[1], (int, float)):
+            audio_duration = float(result[1])
+        if all(isinstance(item, dict) for item in result):
+            metadata["segments"] = result
+    elif isinstance(result, dict):
+        if "text" in result:
+            transcript = result.get("text") or None
+        elif "segments" in result:
+            transcript = _segments_to_text(result.get("segments")) or None
+        metadata["segments"] = result.get("segments")
+        metadata["model"] = result.get("model") or result.get("model_id")
+        metadata["language"] = result.get("language")
+        if isinstance(result.get("audio_duration"), (int, float)):
+            audio_duration = float(result["audio_duration"])
+    elif isinstance(result, str):
+        transcript = result
+
+    if not transcript and isinstance(result, (list, tuple)):
+        transcript = _segments_to_text(result) or None
+
+    metadata["transcript_payload"] = {
+        "text": transcript or "",
+        "model": metadata.get("model"),
+        "language": metadata.get("language"),
+        "segments": metadata.get("segments") or [],
+    }
+
+    return transcript, audio_duration, metadata
+
+
+def _transcribe_webui_backend(
+    file_path: str,
+    *,
+    base_url: str,
+    options: Optional[Dict[str, Any]] = None,
+    timeout: Optional[float] = 600.0,
+    auth: Optional[Tuple[str, str]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    verify_ssl: bool = True,
+    submit_path: str = "/transcription",
+    task_path_template: str = "/task/{identifier}",
+    poll_interval_seconds: float = 3.0,
+    max_polls: int = 120,
+) -> Tuple[Optional[str], float, Dict[str, Any]]:
+    """Send audio to WhisperX backend queue API and poll for completion."""
+
+    try:
+        with requests.Session() as session:
+            if auth:
+                session.auth = auth
+            if headers:
+                session.headers.update(headers)
+
+            with open(file_path, "rb") as file_handle:
+                response = session.post(
+                    _join_base_url(base_url, submit_path),
+                    files={"file": (os.path.basename(file_path), file_handle, "application/octet-stream")},
+                    data=_prepare_webui_payload(options),
+                    timeout=timeout,
+                    verify=verify_ssl,
+                )
+            response.raise_for_status()
+            queue_payload = response.json()
+            task_id = queue_payload.get("identifier")
+            if not task_id:
+                raise ValueError("Backend response did not include an identifier")
+
+            last_status: Dict[str, Any] = dict(queue_payload)
+            for _ in range(max_polls):
+                status_response = session.get(
+                    _join_base_url(
+                        base_url,
+                        task_path_template.format(identifier=task_id),
+                    ),
+                    timeout=timeout,
+                    verify=verify_ssl,
+                )
+                status_response.raise_for_status()
+                last_status = status_response.json()
+                status = str(last_status.get("status", "")).lower()
+                if status == "completed":
+                    return _normalize_webui_result(
+                        last_status.get("result"),
+                        protocol="backend",
+                        task_id=task_id,
+                        raw_status=last_status,
+                    )
+                if status == "failed":
+                    metadata = {
+                        "error": last_status.get("error") or "backend task failed",
+                        "segments": None,
+                        "model": None,
+                        "language": None,
+                        "task_id": task_id,
+                        "protocol": "backend",
+                        "raw_result": None,
+                        "raw_status": last_status,
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                        "transcript_payload": {
+                            "text": "",
+                            "model": None,
+                            "language": None,
+                            "segments": [],
+                        },
+                    }
+                    return None, 0.0, metadata
+                time.sleep(poll_interval_seconds)
+
+        raise TimeoutError(f"Backend task {task_id} did not complete within {max_polls} polls")
+    except Exception as exc:  # pragma: no cover - network failures
+        logging.error("Failed to run WhisperX-WebUI backend queue API: %s", exc)
+        return None, 0.0, {
+            "error": str(exc),
+            "segments": None,
+            "model": None,
+            "language": None,
+            "task_id": None,
+            "protocol": "backend",
+            "raw_result": None,
+            "raw_status": None,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "transcript_payload": {
+                "text": "",
+                "model": None,
+                "language": None,
+                "segments": [],
+            },
+        }
+
+
 def transcribe_webui(
     file_path: str,
     *,
     base_url: str,
     options: Optional[Dict[str, Any]] = None,
+    protocol: str = "gradio",
     transcribe_path: str = "/_transcribe_file",
+    backend_submit_path: str = "/transcription",
+    backend_task_path_template: str = "/task/{identifier}",
+    poll_interval_seconds: float = 3.0,
+    max_polls: int = 120,
     timeout: Optional[float] = 600.0,
     auth: Optional[Tuple[str, str]] = None,
     headers: Optional[Dict[str, str]] = None,
     verify_ssl: bool = True,
 ) -> Tuple[Optional[str], float, Dict[str, Any]]:
-    """Send audio to WhisperX-WebUI via gradio_client and return transcript text.
+    """Send audio to WhisperX-WebUI and normalize the result.
 
-    WhisperX-WebUI's Gradio endpoints are synchronous: the request blocks until
-    the job finishes and the response contains the final transcript. Progress
-    polling is not available on this interface.
+    `protocol="backend"` targets the queued FastAPI service.
+    `protocol="gradio"` targets the synchronous Gradio endpoint.
     """
+
+    if protocol == "backend":
+        return _transcribe_webui_backend(
+            file_path,
+            base_url=base_url,
+            options=options,
+            timeout=timeout,
+            auth=auth,
+            headers=headers,
+            verify_ssl=verify_ssl,
+            submit_path=backend_submit_path,
+            task_path_template=backend_task_path_template,
+            poll_interval_seconds=poll_interval_seconds,
+            max_polls=max_polls,
+        )
 
     metadata: Dict[str, Any] = {"error": None, "segments": None, "model": None, "language": None}
 
@@ -425,37 +645,30 @@ def transcribe_webui(
         result = client.predict(**predict_kwargs)
     except Exception as exc:  # pragma: no cover - network failures
         logging.error("Failed to run WhisperX-WebUI via gradio_client: %s", exc)
-        metadata["error"] = str(exc)
+        metadata.update(
+            {
+                "error": str(exc),
+                "task_id": None,
+                "protocol": "gradio",
+                "raw_result": None,
+                "raw_status": None,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "transcript_payload": {
+                    "text": "",
+                    "model": None,
+                    "language": None,
+                    "segments": [],
+                },
+            }
+        )
         return None, 0.0, metadata
 
-    transcript: Optional[str] = None
-    audio_duration = 0.0
-
-    if isinstance(result, (list, tuple)) and result:
-        transcript_candidate = result[0]
-        transcript = (
-            str(transcript_candidate) if transcript_candidate is not None else None
-        )
-        if len(result) > 1 and isinstance(result[1], (int, float)):
-            audio_duration = float(result[1])
-        # Attempt to capture segment metadata when the response is a list of dicts.
-        if all(isinstance(item, dict) for item in result):
-            metadata["segments"] = result
-    elif isinstance(result, dict):
-        if "text" in result:
-            transcript = result.get("text") or None
-        elif "segments" in result:
-            transcript = _segments_to_text(result.get("segments")) or None
-        metadata["segments"] = result.get("segments")
-        metadata["model"] = result.get("model") or result.get("model_id")
-        metadata["language"] = result.get("language")
-    elif isinstance(result, str):
-        transcript = result
-
-    if not transcript and isinstance(result, (list, tuple)):
-        transcript = _segments_to_text(result) or None
-
-    return transcript, audio_duration, metadata
+    transcript, audio_duration, normalized = _normalize_webui_result(
+        result,
+        protocol="gradio",
+    )
+    normalized["error"] = metadata["error"]
+    return transcript, audio_duration, normalized
 
 
 def transcribe_ct2(file_path, model, skip_files):

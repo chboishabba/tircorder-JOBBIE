@@ -6,6 +6,11 @@ from datetime import datetime, timedelta
 from queue import Queue
 from typing import Dict, Optional
 
+from .downstream import (
+    fanout_whisperx_downstream,
+    write_downstream_receipts,
+    write_json_artifact,
+)
 from .sb_adapter import build_execution_envelope, write_execution_envelope
 from .state import export_queues_and_files, load_state
 from .utils import (
@@ -29,6 +34,18 @@ def _coerce_bool(value: Optional[object], default: bool = True) -> bool:
     if isinstance(value, str):
         return value.strip().lower() not in {"false", "0", "no", "off", ""}
     return bool(value)
+
+
+def _artifact_path(
+    transcript_txt_path: str,
+    *,
+    suffix: str,
+    base_dir: Optional[str] = None,
+) -> str:
+    base_name = os.path.basename(os.path.splitext(transcript_txt_path)[0]) + suffix
+    if base_dir:
+        return os.path.join(base_dir, base_name)
+    return os.path.join(os.path.dirname(transcript_txt_path), base_name)
 
 
 def transcriber(
@@ -152,7 +169,18 @@ def transcriber(
                     file,
                     base_url=webui_config.get("base_url", ""),
                     options=webui_config.get("options"),
+                    protocol=str(webui_config.get("protocol", "gradio")).lower(),
                     transcribe_path=webui_config.get("transcribe_path", "/_transcribe_file"),
+                    backend_submit_path=(webui_config.get("backend") or {}).get(
+                        "submit_path", "/transcription"
+                    ),
+                    backend_task_path_template=(webui_config.get("backend") or {}).get(
+                        "task_path_template", "/task/{identifier}"
+                    ),
+                    poll_interval_seconds=float((webui_config.get("backend") or {}).get(
+                        "poll_interval_seconds", 3.0
+                    )),
+                    max_polls=int((webui_config.get("backend") or {}).get("max_polls", 120)),
                     timeout=timeout_value,
                     auth=auth_credentials,
                     headers=headers,
@@ -182,35 +210,69 @@ def transcriber(
             try:
                 with open(output_path, "w") as f:
                     f.write(output_text)
-                if transcription_method == "webui" and webui_config.get("emit_envelope"):
-                    transcript_payload = {
+
+                if transcription_method == "webui":
+                    transcript_payload = metadata.get("transcript_payload") or {
                         "text": output_text,
                         "model": metadata.get("model"),
                         "language": metadata.get("language"),
                         "segments": metadata.get("segments") or [],
                     }
-                    envelope_payload = build_execution_envelope(
-                        transcript_payload,
-                        source="whisperx_webui",
-                        model=metadata.get("model"),
-                        language=metadata.get("language"),
+                    downstream_config = dict(webui_config.get("downstream") or {})
+                    should_persist_transcript = _coerce_bool(
+                        downstream_config.get("persist_raw_transcript"),
+                        True,
+                    )
+                    transcript_artifact_path = None
+                    if should_persist_transcript:
+                        transcript_artifact_path = _artifact_path(
+                            output_path,
+                            suffix=".whisperx_transcript.json",
+                            base_dir=webui_config.get("envelope_dir"),
+                        )
+                        write_json_artifact(transcript_artifact_path, transcript_payload)
+
+                    should_emit_envelope = bool(
+                        webui_config.get("emit_envelope")
+                        or (downstream_config.get("statibaker") or {}).get("enabled")
+                    )
+                    envelope_payload = None
+                    envelope_path = None
+                    if should_emit_envelope:
+                        envelope_payload = build_execution_envelope(
+                            transcript_payload,
+                            source="whisperx_webui",
+                            model=metadata.get("model"),
+                            language=metadata.get("language"),
+                            audio_path=file,
+                            adapter_label="tircorder_whisperx_webui_v1",
+                            envelope_format=webui_config.get(
+                                "envelope_format", "sb_execution_envelope_v1"
+                            ),
+                        )
+                        envelope_path = _artifact_path(
+                            output_path,
+                            suffix=".execution_envelope.json",
+                            base_dir=webui_config.get("envelope_dir"),
+                        )
+                        write_execution_envelope(envelope_path, envelope_payload)
+
+                    receipts = fanout_whisperx_downstream(
                         audio_path=file,
-                        adapter_label="tircorder_whisperx_webui_v1",
-                        envelope_format=webui_config.get(
-                            "envelope_format", "sb_execution_envelope_v1"
+                        transcript_payload=transcript_payload,
+                        execution_envelope=(
+                            envelope_payload["execution_envelope"] if envelope_payload else None
                         ),
+                        metadata=metadata,
+                        downstream_config=downstream_config,
+                        transcript_artifact_path=transcript_artifact_path,
                     )
-                    envelope_dir = webui_config.get("envelope_dir")
-                    envelope_path = (
-                        os.path.join(envelope_dir, os.path.basename(output_path))
-                        if envelope_dir
-                        else output_path
+                    receipts_path = _artifact_path(
+                        output_path,
+                        suffix=".downstream_receipts.json",
+                        base_dir=webui_config.get("envelope_dir"),
                     )
-                    envelope_path = (
-                        os.path.splitext(envelope_path)[0]
-                        + ".execution_envelope.json"
-                    )
-                    write_execution_envelope(envelope_path, envelope_payload)
+                    write_downstream_receipts(receipts_path, receipts)
                 end_time = datetime.now()
                 elapsed_time = (end_time - start_time).total_seconds()
                 real_time_factor = (
