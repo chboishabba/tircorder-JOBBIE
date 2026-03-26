@@ -1,35 +1,108 @@
-# TiRCorder: Part of the ITIR Suite
+# TiRCorder
 
-## Overview
-TiRCorder is the voice-activated recording and transcription component of the
-Intergenerational Trauma-Informed Identity Rebuilder (ITIR) toolset. The
-platform focuses on secure, ethical, and accessible data capture for
-communities managing intergenerational trauma. TiRCorder is currently evolving
-from its original command-line utility toward a full GUI experience while
-retaining its CLI and API for advanced operators. Licensed under the Mozilla
-Public License (MPL 2.0), the suite prioritizes transparency, privacy, and
-operational resilience.
-<img width="9011" height="20036" alt="NotebookLM Mind Map(7)" src="https://github.com/user-attachments/assets/304af15e-1533-4b99-8054-fd85078ea382" />
+TiRCorder is the suite's capture and transcription intake layer.
+
+It is the part of the workspace that focuses on getting spoken material and
+related capture artifacts into a form the rest of the suite can use.
+
+In plain language:
+
+- it records or ingests audio
+- it runs transcription
+- it keeps the outputs available for downstream review
+- it can pass those outputs into other suite components instead of leaving them
+  stranded as loose files
+
+## What TiRCorder Does
+
+TiRCorder currently provides:
+
+- voice-activated or workflow-driven recording
+- transcription using Whisper, cTranslate2, or remote WebUI/backends
+- queueing/scheduling around transcription work
+- local and remote transcription pathways
+- downstream fan-out into other suite surfaces such as SensibLaw and
+  StatiBaker
+
+## What You Can Do With It Today
+
+### 1. Capture audio and turn it into transcript artifacts
+
+The basic job is simple:
+
+- collect audio
+- transcribe it
+- persist usable artifacts for later review
+
+Typical outputs include:
+
+- transcript JSON
+- execution-envelope style artifacts
+- downstream receipt files
+
+### 2. Use local or remote transcription backends
+
+TiRCorder can work with:
+
+- local Whisper/cTranslate2 style backends
+- remote backend/API paths
+- WebUI-linked paths when that better matches the deployment
+
+That matters because the project is designed for real environments with uneven
+hardware, not only an ideal local GPU setup.
+
+### 3. Feed the rest of the suite
+
+TiRCorder is not meant to be the end of the process.
+
+It can hand outputs onward so that:
+
+- `SensibLaw` can ingest transcript-related artifacts into structured review
+  surfaces
+- `StatiBaker` can preserve execution/activity traces as read-only state
+
+## Proven Abilities
+
+Current repo-backed capabilities include:
+
+- production capture/transcription paths
+- local and remote backend support
+- queue/scheduling logic
+- downstream receipt and envelope handling
+- documented integration points into the broader suite
+
+What that means in practice:
+
+- TiRCorder is already more than a one-off recorder script
+- it already fits into a larger provenance-aware workflow
+- it can operate in constrained environments where compute/setup details matter
 
 ## Quick Start
 
 ### Prerequisites
-- Python **3.8+** (tested with 3.9.18 on Arch Linux). Please note that only some kernel versions and cards are officially supported by ROCm, though compatibility has been broadened by [TheRock](https://github.com/ROCm/TheRock).
-- [`ffmpeg`](https://ffmpeg.org/) available on your PATH.
-- Optional: GPU runtimes (CUDA, ROCm, or Metal) if you plan to leverage
-  accelerated Whisper/cTranslate2 inference. Install platform-specific drivers
-  before running TiRCorder.
-- Optional: Rust toolchain for environments where `tiktoken` wheels are not
-  prebuilt (`cargo`, `rustc`, and `setuptools-rust`).
 
-### Install and Launch
+- Python `3.8+`
+- `ffmpeg` on `PATH`
+- optional GPU runtimes if you want accelerated transcription
+- optional Rust toolchain in environments where certain wheels are not
+  prebuilt
+
+### Basic launch
+
 ```bash
 git clone https://github.com/chboishabba/tircorder.git
 cd tircorder
-python tircorder.py  # or use tircorder-linux.py on Linux
+python tircorder.py
 ```
 
-### Environment Checks
+Linux-specific alternative:
+
+```bash
+python tircorder-linux.py
+```
+
+### Environment checks
+
 ```bash
 python --version
 python - <<'PY'
@@ -38,174 +111,126 @@ print(f"CUDA available: {torch.cuda.is_available()}")
 PY
 ```
 
-## Architecture Highlights
-- **Entry points**: `tircorder.py` and `tircorder-linux.py` bootstrap dependency
-  checks and launch the client/server runtime.
-- **Orchestration**: `main.py` wires queues, models, and worker threads for
-  scanning, transcription, and post-processing.
-- **Workers**:
-  - `scanner` monitors configured directories and enqueues new audio assets.
-  - `transcriber` orchestrates Whisper or cTranslate2 jobs.
-  - `wav2flac` converts intermediary audio artifacts for storage efficiency.
-- **Interfaces and tooling**: modules in `tircorder/interfaces/` expose config
-  management, scheduling, and client coordination utilities.
+## Common Workflows
+
+### Local transcription workflow
+
+Use this when the same machine is doing capture and transcription.
+
+Relevant surfaces:
+
+- `tircorder.py`
+- `tircorder-linux.py`
+- `main.py`
+
+### Remote or WebUI-backed transcription workflow
+
+Use this when capture and heavy transcription should be separated.
+
+Relevant configuration/docs:
+
+- `tircorder/interfaces/config.py`
+- the `transcription.webui` configuration section
+- the WebUI vs backend API notes in this README
+
+### Downstream suite integration
+
+Use this when transcript outputs should feed the rest of the suite rather than
+stopping at raw transcript files.
+
+Current downstream expectations include:
+
+- transcript JSON artifacts
+- execution envelope artifacts
+- downstream receipts
+- optional SensibLaw sink
+- optional StatiBaker sink
 
 ## Feature Highlights
-- **Voice activation** with configurable sensitivity for all-day capture.
-- **Activity-based recording management** to optimize resource usage.
-- **Task scheduling** and queueing to prevent processing conflicts.
-- **GPU acceleration** (with CPU fallback) for high-throughput transcription.
-- **Remote transcription support** so heavy workloads can be offloaded to a
-  dedicated server.
-- **Calendar and timeline visualizations** for historical insight.
-- **Update tracking** via [`Updates.md`](Updates.md) for release notes.
 
-## SensibLaw integration (Layer 0–1 alignment)
-TiRCorder is the event/narrative capture layer in the shared SensibLaw ontology.
-To keep provenance and identity stable, TiRCorder aligns to the shared substrate:
-
-- Normalize transcripts/notes into `Document` → `Sentence` → `Token` (Layer 0).
-- Anchor `Utterance` to `Sentence` via `UtteranceSentence`.
-- Resolve `speakers` into shared `Actor` records; keep actor traits in detail/alias tables.
-- Populate `lexemes`, `concepts`, and `phrase_occurrences` for canonical term mapping.
-- Link finance timelines through `accounts`, `transactions`, `transfers`, plus
-  `FinanceProvenance` and `EventFinanceLink`.
-- Use deterministic SensibLaw utilities (normalizers, matchers, resilient ingestion).
-
-### Feature Matrix
-| Capability | Status | Notes |
-| --- | --- | --- |
-| Voice-activated recording | Production | Tunable thresholds via configuration.
-| Whisper & cTranslate2 transcription | Production | Switch engines per deployment.
-| Remote WebUI transcription | Production | Authenticate with username/password or API key.
-| Adaptive recording intervals | In development | Storage-saving heuristics under active testing.
-| Speaker diarization | Production | Planned integration with WhisperX.
-| Word-level transcripts & confidence | Production | Dependent on diarization pipeline.
-| Sentiment, timeline, and calendar dashboards | Prototype | Hooks for external activity sources (YouTube, Google Docs, Zapier).
-| Web-based operator interface | Prototype | Gradio interface available; dedicated UX in progress.
+- voice-activated recording
+- queue-aware transcription flow
+- GPU acceleration with CPU fallback
+- remote transcription support
+- timeline/calendar-oriented history surfaces
+- integration hooks for the broader suite
 
 ## Configuration
-TiRCorder reads runtime settings through
-`tircorder/interfaces/config.py`, which persists JSON configuration files.
-Follow these steps to tailor an installation:
 
-1. **Locate the configuration file**:
-   - Defaults to `~/.tircorder/config.json`.
-   - Override the location with the `TIRCORDER_CONFIG_PATH` environment
-     variable.
-2. **Inspect existing values** using the helper:
-   ```python
-   from tircorder.interfaces.config import TircorderConfig
-   print(TircorderConfig.get_config())
-   ```
-3. **Choose a transcription backend** by setting `transcription.method` to
-   `"whisper"`, `"ctranslate2"`, or `"webui"`.
-4. **Authenticate remote services** by filling the `transcription.webui`
-   section:
-   ```json
-   {
-     "transcription": {
-       "method": "webui",
-       "webui": {
-         "base_url": "https://webui.example",
-         "protocol": "backend",
-         "emit_envelope": true,
-         "envelope_dir": "/var/tmp/tircorder/envelopes",
-         "envelope_format": "sb_execution_envelope_v1",
-         "username": "operator",
-         "password": "s3cret",
-         "timeout": 900,
-         "backend": {
-           "submit_path": "/transcription",
-           "task_path_template": "/task/{identifier}",
-           "poll_interval_seconds": 3.0,
-           "max_polls": 120
-         },
-         "downstream": {
-           "persist_raw_transcript": true,
-           "sensiblaw": {
-             "enabled": true,
-             "storage_path": "/abs/path/to/tircorder_whisperx.db"
-           },
-           "statibaker": {
-             "enabled": true,
-             "log_root": "/abs/path/to/StatiBaker/runs"
-           }
-         },
-         "options": {
-           "temperature": 0.1
-         }
-       }
-     }
-   }
-   ```
-   5. **Artifacts and fan-out**:
-      - `<audio_stem>.whisperx_transcript.json` stores the normalized WhisperX-style transcript.
-      - `<audio_stem>.execution_envelope.json` stores the SB-ready execution envelope.
-      - `<audio_stem>.downstream_receipts.json` records SensibLaw/StatiBaker sink results.
-      - When `downstream.sensiblaw.enabled` is true, TiRCorder imports the transcript into the configured SensibLaw SQLite store.
-      - When `downstream.statibaker.enabled` is true, TiRCorder appends a transcription activity event under `runs/<date>/logs/transcription/<date>.jsonl`.
-   6. **Persist updates** with `TircorderConfig.set_config({...})`; the helper will
-      create the directory tree if it does not yet exist.
+Runtime settings are handled through:
 
-### WebUI vs. backend APIs
-- The WhisperX Gradio WebUI endpoint (`/_transcribe_file`) is a synchronous
-  call: the request remains open until the transcription is finished and the
-  response contains the final outputs. There is no status or polling route
-  available for these endpoints beyond the UI's own progress bar.
-- For queued jobs with progress reporting, target the backend FastAPI service
-  instead: `POST /transcription` enqueues work and returns an identifier,
-  `GET /task/{identifier}` reports status/results, and background-music
-  separation downloads are available via `GET /task/file/{identifier}`.
-- TiRCorder now supports both modes. Set `transcription.webui.protocol` to
-  `backend` for the queued API or `gradio` for the synchronous endpoint.
+- `tircorder/interfaces/config.py`
 
-## Roadmap & Vision
-Explore the long-term strategy, release themes, and community priorities in the
-[roadmap](docs/roadmap.md). For a historical perspective of TFYQA, see the
-[archived site](https://web.archive.org/web/20070831084954/http://www.tfyqa.biz/).
+Key ideas:
 
-## Contribution Guidelines
-We warmly welcome contributions.
-1. Fork the repository and create a feature branch.
-2. Install development dependencies:
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
-3. Run the test suite before submitting a pull request:
-   ```bash
-   PYENV_VERSION=3.10.17 PYTHONPATH=. pytest tests/test_calendar_utils.py -q
-   ```
-4. Provide a clear summary and include command output when opening a PR.
-5. For larger ideas, open an issue or discussion first to coordinate with the
-   maintainers.
+- config defaults to `~/.tircorder/config.json`
+- `TIRCORDER_CONFIG_PATH` can override the location
+- `transcription.method` chooses the backend
+- `transcription.webui` config controls remote/WebUI-backed paths
 
-## Documentation & Further Reading
-- [3D Timeline Axis Priorities](docs/3d_timeline.md)
-- [Accessibility commitments](accessibility.md)
-- [Financial timeline concepts - please note these functions are being moved to SensibLaw but will still remain available for personal use within ITIR](docs/financial_timeline.md)
-- [Interface and visualisation sketches](docs/visualiser_interface.md)
+If you are using downstream fan-out, make sure the SensibLaw and StatiBaker
+target paths are configured intentionally rather than left ambiguous.
 
-## Accessibility
-Legacy transcript-browser helpers under `Pelican/` and `Zola/` use semantic
-HTML, a skip-navigation link, and ARIA list semantics for timeline items.
-Those stacks are now retained only as reference material while the suite
-transitions to `itir-svelte/` as the sole web interface. Timeline labels expose
-expanded/collapsed state, and the current transcript line is announced via an
-`aria-live` region as audio plays. Visible focus outlines support keyboard
-navigation. We document implemented accessibility tools and the TODO roadmap in
-[accessibility.md](accessibility.md) and welcome community feedback as we work
-toward WCAG 2.1 AA compliance.
+## Relationship To The Rest Of The Suite
+
+TiRCorder is the capture/intake layer.
+
+It sits beside:
+
+- `WhisperX-WebUI`, which can serve as a transcription service/UI surface
+- `SensibLaw`, which turns downstream artifacts into structured review surfaces
+- `StatiBaker`, which preserves execution/state traces
+
+Short version:
+
+- TiRCorder gets material in
+- SensibLaw makes bounded reviewed structure
+- StatiBaker preserves time/state around the process
+
+## Where To Find Things
+
+### Start here
+
+- roadmap:
+  [docs/roadmap.md](docs/roadmap.md)
+- accessibility:
+  [accessibility.md](accessibility.md)
+- financial timeline note:
+  [docs/financial_timeline.md](docs/financial_timeline.md)
+- interface/visualisation sketches:
+  [docs/visualiser_interface.md](docs/visualiser_interface.md)
+
+### Configuration and integration
+
+- config surface:
+  `tircorder/interfaces/config.py`
+- suite integration notes:
+  see the SensibLaw integration section in this README
+
+## WebUI vs Backend APIs
+
+- The Gradio/WebUI path is synchronous: you call it and wait for the finished
+  result.
+- The backend API path is queued: you submit work, then poll for status.
+- TiRCorder supports both; choose based on the deployment and workload.
+
+## What TiRCorder Is Not
+
+TiRCorder is not the suite’s interpretation layer.
+
+Its job is to capture, transcribe, and hand off material cleanly so other
+layers can review or preserve it.
 
 ## License
+
 ITIR and TiRCorder are products of TFYQA.biz provided under the
-[Mozilla Public License 2.0](https://www.mozilla.org/en-US/MPL/).
+[Mozilla Public License 2.0](https://www.mozilla.org/en-US/MPL/).
 All rights are reserved where permitted.
 
-## Acknowledgements & Support
+## Acknowledgements
+
 Massive thank you to
 [lamikr](https://github.com/lamikr/rocm_sdk_builder),
 [xuhuisheng](https://github.com/xuhuisheng/rocm-gfx803), and
-[robertrosenbusch](https://github.com/robertrosenbusch/gfx803_rocm) for enabling
-continued development. If TiRCorder has helped you or your community, consider
-[sponsoring a coffee](https://www.paypal.com/paypalme/JohnABrown).
+[robertrosenbusch](https://github.com/robertrosenbusch/gfx803_rocm) for making
+continued development on older ROCm/gfx803 environments more viable.
