@@ -35,7 +35,7 @@ fn scan_directories_respects_ignore_flags() {
     let shutdown = Arc::new(AtomicBool::new(false));
 
     let handle = start_scanner(
-        vec![dir1.path().to_path_buf()],
+        vec![(dir1.path().to_path_buf(), false, false)],
         tx_transcribe,
         tx_convert,
         shutdown.clone(),
@@ -75,7 +75,7 @@ fn start_scanner_dispatches_new_files() {
     let (tx_convert, rx_convert) = unbounded();
 
     let handle = start_scanner(
-        vec![dir.path().to_path_buf()],
+        vec![(dir.path().to_path_buf(), false, false)],
         tx_transcribe,
         tx_convert,
         shutdown.clone(),

@@ -1,6 +1,5 @@
 use crossbeam_channel::{Receiver, RecvTimeoutError};
 use ffmpeg_cli::{FfmpegBuilder, File, Parameter};
-use log::error;
 use std::ffi::OsStr;
 use std::io;
 use std::path::PathBuf;

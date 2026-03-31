@@ -1,5 +1,7 @@
 use crossbeam_channel::Sender;
 use std::collections::HashSet;
+use log::warn;
+use rusqlite::Connection;
 use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -12,6 +14,74 @@ use std::time::Duration;
 
 const AUDIO_EXTENSIONS: &[&str] = &["wav", "flac", "mp3", "ogg", "amr"];
 const TRANSCRIPT_EXTENSIONS: &[&str] = &["srt", "txt", "vtt", "json", "tsv"];
+
+/// Resolve scan directories from the database, falling back to CLI-specified
+/// paths when no database entries are found.
+///
+/// Database entries take precedence over CLI arguments. The `recordings_folders`
+/// table is created on demand if missing, and empty or unreadable databases
+/// cause the function to return the provided CLI paths with default flags
+/// (`ignore_transcribing = false`, `ignore_converting = false`).
+/// Returns the directories alongside a flag indicating whether the database was
+/// used.
+pub fn load_recording_dirs(
+    db_path: &Path,
+    cli_dirs: Vec<PathBuf>,
+) -> (Vec<(PathBuf, bool, bool)>, bool) {
+    let fallback: Vec<_> = cli_dirs
+        .into_iter()
+        .map(|path| (path, false, false))
+        .collect();
+
+    let conn = match Connection::open(db_path) {
+        Ok(conn) => conn,
+        Err(err) => {
+            warn!("Failed to open {}: {err}", db_path.display());
+            return (fallback, false);
+        }
+    };
+
+    if let Err(err) = conn.execute(
+        "CREATE TABLE IF NOT EXISTS recordings_folders (
+            id INTEGER PRIMARY KEY,
+            folder_path TEXT UNIQUE,
+            ignore_transcribing INTEGER DEFAULT 0,
+            ignore_converting INTEGER DEFAULT 0
+        )",
+        [],
+    ) {
+        warn!("Failed to ensure recordings_folders table exists: {err}");
+        return (fallback, false);
+    }
+
+    let mut stmt = match conn.prepare(
+        "SELECT folder_path, ignore_transcribing, ignore_converting FROM recordings_folders",
+    ) {
+        Ok(stmt) => stmt,
+        Err(err) => {
+            warn!("Failed to prepare folder query: {err}");
+            return (fallback, false);
+        }
+    };
+
+    let db_dirs: rusqlite::Result<Vec<_>> = stmt
+        .query_map([], |row| {
+            let path: String = row.get(0)?;
+            let ignore_transcribing: i64 = row.get(1)?;
+            let ignore_converting: i64 = row.get(2)?;
+            Ok((
+                PathBuf::from(path),
+                ignore_transcribing != 0,
+                ignore_converting != 0,
+            ))
+        })
+        .and_then(|rows| rows.collect());
+
+    match db_dirs {
+        Ok(dirs) if !dirs.is_empty() => (dirs, true),
+        _ => (fallback, false),
+    }
+}
 
 /// Scan the provided directories once and return audio files queued for
 /// transcription and conversion.
@@ -70,13 +140,12 @@ pub fn scan_directories(dirs: Vec<(PathBuf, bool, bool)>) -> (Vec<PathBuf>, Vec<
 /// Start a background scanner that periodically inspects directories and queues
 /// new audio files for transcription and conversion until `shutdown` is set.
 pub fn start_scanner(
-    dirs: Vec<PathBuf>,
+    dirs: Vec<(PathBuf, bool, bool)>,
     tx_transcribe: Sender<PathBuf>,
     tx_convert: Sender<PathBuf>,
     shutdown: Arc<AtomicBool>,
 ) -> Result<thread::JoinHandle<()>, io::Error> {
-    let scan_dirs: Vec<(PathBuf, bool, bool)> =
-        dirs.into_iter().map(|d| (d, false, false)).collect();
+    let scan_dirs = dirs;
 
     Ok(thread::spawn(move || {
         let mut dispatched_transcribe: HashSet<PathBuf> = HashSet::new();

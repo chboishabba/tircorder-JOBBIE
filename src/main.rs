@@ -18,7 +18,20 @@ fn main() {
     let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("scan") => {
-            let dirs: Vec<PathBuf> = args.map(PathBuf::from).collect();
+            let cli_dirs: Vec<PathBuf> = args.map(PathBuf::from).collect();
+            let db_path = PathBuf::from("state.db");
+            let (dirs, used_db) = scanner::load_recording_dirs(&db_path, cli_dirs);
+            if used_db {
+                println!(
+                    "Using folders from {} (CLI arguments are ignored when entries exist)",
+                    db_path.display()
+                );
+            }
+
+            if dirs.is_empty() {
+                eprintln!("No scan folders supplied via database or CLI.");
+                return;
+            }
             let (tx_transcribe, _rx_t) = unbounded();
             let (tx_convert, rx_convert) = unbounded();
 
@@ -90,6 +103,8 @@ fn main() {
             error!("Usage: tircorder-rs <scan <dirs...>|convert <files...>>");
             eprintln!("Usage: tircorder-rs <scan|convert <files...>>");
             eprintln!("Usage: tircorder-rs <scan <dirs...>|convert <files...>|init [folders...]>");
+            eprintln!("Scan precedence: folders stored via `init` are used when available;");
+            eprintln!("CLI folders are used only when the database is empty.");
         }
     }
 }
