@@ -3,15 +3,9 @@ import os
 import sqlite3
 import time
 from datetime import datetime, timedelta
-from queue import Queue
-from typing import Dict, Optional
+from queue import Empty, Queue
+from typing import Dict, Optional, Tuple
 
-from .downstream import (
-    fanout_whisperx_downstream,
-    write_downstream_receipts,
-    write_json_artifact,
-)
-from .sb_adapter import build_execution_envelope, write_execution_envelope
 from .state import export_queues_and_files, load_state
 from .utils import (
     get_transcription_backend,
@@ -34,18 +28,6 @@ def _coerce_bool(value: Optional[object], default: bool = True) -> bool:
     if isinstance(value, str):
         return value.strip().lower() not in {"false", "0", "no", "off", ""}
     return bool(value)
-
-
-def _artifact_path(
-    transcript_txt_path: str,
-    *,
-    suffix: str,
-    base_dir: Optional[str] = None,
-) -> str:
-    base_name = os.path.basename(os.path.splitext(transcript_txt_path)[0]) + suffix
-    if base_dir:
-        return os.path.join(base_dir, base_name)
-    return os.path.join(os.path.dirname(transcript_txt_path), base_name)
 
 
 def transcriber(
@@ -72,9 +54,9 @@ def transcriber(
         webui_config = {**webui_config, **override_values}
 
     def execute_with_retry(query, params=(), retries=5, delay=1):
-        conn = sqlite3.connect("state.db")
-        cursor = conn.cursor()
         for attempt in range(retries):
+            conn = sqlite3.connect("state.db")
+            cursor = conn.cursor()
             try:
                 cursor.execute(query, params)
                 conn.commit()
@@ -82,206 +64,48 @@ def transcriber(
             except sqlite3.OperationalError as e:
                 if "database is locked" in str(e):
                     logging.warning(
-                        f"Database is locked, retrying in {delay} seconds... (attempt {attempt + 1})"
+                        "Database is locked, retrying in %s seconds... (attempt %s)",
+                        delay,
+                        attempt + 1,
                     )
                     time.sleep(delay)
                 else:
                     raise
             finally:
                 conn.close()
-        logging.error(f"Failed to execute query after {retries} attempts: {query}")
+        logging.error("Failed to execute query after %s attempts: %s", retries, query)
         raise sqlite3.OperationalError("Database is locked and retries exhausted")
 
-    while True:
-        known_file_id = TRANSCRIBE_QUEUE.get()
-        start_time = datetime.now()
-        TRANSCRIBE_ACTIVE.set()
-
+    def resolve_known_file(known_file_id: int) -> Optional[Tuple[str, str]]:
         conn = sqlite3.connect("state.db")
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT k.file_name, r.folder_path FROM known_files k JOIN recordings_folders r ON k.folder_id = r.id WHERE k.id = ?",
+            "SELECT k.file_name, r.folder_path FROM known_files k "
+            "JOIN recordings_folders r ON k.folder_id = r.id WHERE k.id = ?",
             (known_file_id,),
         )
         result = cursor.fetchone()
         conn.close()
+        return result
 
-        if not result:
-            logging.error(
-                f"File with known_file_id {known_file_id} not found in database."
-            )
-            continue
+    def finalize_transcription(
+        *,
+        known_file_id: int,
+        file: str,
+        start_time: datetime,
+        output_text: Optional[str],
+        audio_duration: float,
+        metadata: Optional[Dict[str, object]] = None,
+    ) -> None:
+        metadata = metadata or {}
 
-        file_name, folder_path = result
-        file = os.path.join(folder_path, file_name)
-
-        if not file_name.endswith(tuple(audio_extensions)):
-            logging.info(f"Skipping non-audio file: {file}")
-            TRANSCRIBE_QUEUE.task_done()
-            continue
-
-        logging.info(
-            f"SYSTIME: {start_time.strftime('%Y-%m-%d %H:%M:%S')} | Starting transcription for {file}."
-        )
-
-        output_text = None
-        audio_duration = 0.0
-        metadata = {}
-
-        if transcription_method == "python_whisper":
-            output_text = transcribe_audio(file)
-        elif transcription_method == "ctranslate2":
-            output_text, audio_duration = transcribe_ct2(file, model, skip_files)
-        elif transcription_method == "ctranslate2_nonpythonic":
-            output_text, audio_duration = transcribe_ct2_nonpythonic(file)
-        elif transcription_method == "webui":
-            if not webui_config.get("base_url"):
-                error_message = "WebUI base_url is not configured"
-                logging.error(error_message)
-                metadata = {"error": error_message}
-            else:
-                timeout_value = webui_config.get("timeout")
-                if timeout_value is not None:
-                    try:
-                        timeout_value = float(timeout_value)
-                    except (TypeError, ValueError):
-                        logging.warning(
-                            "Invalid timeout value '%s' provided for WebUI backend; using no timeout",
-                            timeout_value,
-                        )
-                        timeout_value = None
-
-                headers = dict(webui_config.get("headers") or {})
-                api_key = webui_config.get("api_key")
-                if api_key and "authorization" not in {
-                    key.lower(): key for key in headers
-                }:
-                    headers["Authorization"] = f"Bearer {api_key}"
-
-                auth_credentials = None
-                if webui_config.get("username"):
-                    auth_credentials = (
-                        webui_config.get("username"),
-                        webui_config.get("password", ""),
-                    )
-
-                output_text, audio_duration, metadata = transcribe_webui(
-                    file,
-                    base_url=webui_config.get("base_url", ""),
-                    options=webui_config.get("options"),
-                    protocol=str(webui_config.get("protocol", "gradio")).lower(),
-                    transcribe_path=webui_config.get("transcribe_path", "/_transcribe_file"),
-                    backend_submit_path=(webui_config.get("backend") or {}).get(
-                        "submit_path", "/transcription"
-                    ),
-                    backend_task_path_template=(webui_config.get("backend") or {}).get(
-                        "task_path_template", "/task/{identifier}"
-                    ),
-                    poll_interval_seconds=float((webui_config.get("backend") or {}).get(
-                        "poll_interval_seconds", 3.0
-                    )),
-                    max_polls=int((webui_config.get("backend") or {}).get("max_polls", 120)),
-                    timeout=timeout_value,
-                    auth=auth_credentials,
-                    headers=headers,
-                    verify_ssl=_coerce_bool(webui_config.get("verify_ssl"), True),
-                )
-            if metadata.get("task_id"):
-                logging.info(
-                    "WhisperX-WebUI task %s started for %s",
-                    metadata["task_id"],
-                    file,
-                )
-            if metadata.get("error"):
-                logging.error(
-                    "WhisperX-WebUI transcription error for %s: %s",
-                    file,
-                    metadata["error"],
-                )
-        else:
-            logging.error(f"Unsupported transcription method: {transcription_method}")
-            TRANSCRIBE_QUEUE.task_done()
-            continue
-
-        logging.info(f"Processing audio with duration {audio_duration:.3f}s")
+        logging.info("Processing audio with duration %.3fs", audio_duration)
 
         if output_text is not None:
-            if transcription_method == "webui" and not metadata.get("is_final", True):
-                logging.info(
-                    "Received non-final WhisperX-WebUI update for %s (session=%s, sequence=%s); skipping transcript persistence until final output.",
-                    file,
-                    metadata.get("session_id"),
-                    metadata.get("sequence"),
-                )
-                TRANSCRIBE_QUEUE.task_done()
-                continue
             output_path = os.path.splitext(file)[0] + ".txt"
             try:
                 with open(output_path, "w") as f:
                     f.write(output_text)
-
-                if transcription_method == "webui":
-                    transcript_payload = metadata.get("transcript_payload") or {
-                        "text": output_text,
-                        "model": metadata.get("model"),
-                        "language": metadata.get("language"),
-                        "segments": metadata.get("segments") or [],
-                    }
-                    downstream_config = dict(webui_config.get("downstream") or {})
-                    should_persist_transcript = _coerce_bool(
-                        downstream_config.get("persist_raw_transcript"),
-                        True,
-                    )
-                    transcript_artifact_path = None
-                    if should_persist_transcript:
-                        transcript_artifact_path = _artifact_path(
-                            output_path,
-                            suffix=".whisperx_transcript.json",
-                            base_dir=webui_config.get("envelope_dir"),
-                        )
-                        write_json_artifact(transcript_artifact_path, transcript_payload)
-
-                    should_emit_envelope = bool(
-                        webui_config.get("emit_envelope")
-                        or (downstream_config.get("statibaker") or {}).get("enabled")
-                    )
-                    envelope_payload = None
-                    envelope_path = None
-                    if should_emit_envelope:
-                        envelope_payload = build_execution_envelope(
-                            transcript_payload,
-                            source="whisperx_webui",
-                            model=metadata.get("model"),
-                            language=metadata.get("language"),
-                            audio_path=file,
-                            adapter_label="tircorder_whisperx_webui_v1",
-                            envelope_format=webui_config.get(
-                                "envelope_format", "sb_execution_envelope_v1"
-                            ),
-                        )
-                        envelope_path = _artifact_path(
-                            output_path,
-                            suffix=".execution_envelope.json",
-                            base_dir=webui_config.get("envelope_dir"),
-                        )
-                        write_execution_envelope(envelope_path, envelope_payload)
-
-                    receipts = fanout_whisperx_downstream(
-                        audio_path=file,
-                        transcript_payload=transcript_payload,
-                        execution_envelope=(
-                            envelope_payload["execution_envelope"] if envelope_payload else None
-                        ),
-                        metadata=metadata,
-                        downstream_config=downstream_config,
-                        transcript_artifact_path=transcript_artifact_path,
-                    )
-                    receipts_path = _artifact_path(
-                        output_path,
-                        suffix=".downstream_receipts.json",
-                        base_dir=webui_config.get("envelope_dir"),
-                    )
-                    write_downstream_receipts(receipts_path, receipts)
                 end_time = datetime.now()
                 elapsed_time = (end_time - start_time).total_seconds()
                 real_time_factor = (
@@ -289,11 +113,14 @@ def transcriber(
                 )
                 proc_comp_timestamps_transcribe.append(datetime.now())
                 logging.info(
-                    f"SYSTIME: {end_time.strftime('%Y-%m-%d %H:%M:%S')} | File {file} transcribed in {elapsed_time:.2f}s (x{real_time_factor:.2f})."
+                    "SYSTIME: %s | File %s transcribed in %.2fs (x%.2f).",
+                    end_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    file,
+                    elapsed_time,
+                    real_time_factor,
                 )
-                TRANSCRIBE_QUEUE.task_done()
             except Exception as e:
-                logging.error(f"Error writing transcription output for {file}: {e}")
+                logging.error("Error writing transcription output for %s: %s", file, e)
                 skip_files.add(file)
                 skip_reasons[file] = "transcription_output_error"
                 execute_with_retry(
@@ -301,9 +128,37 @@ def transcriber(
                     (known_file_id, "transcription_output_error"),
                 )
                 TRANSCRIBE_QUEUE.task_done()
-                continue
+                return
+
+            execute_with_retry(
+                "INSERT INTO convert_queue (known_file_id) VALUES (?)",
+                (known_file_id,),
+            )
+            CONVERT_QUEUE.put(known_file_id)
+            logging.info(
+                "SYSTIME: %s | File %s added to conversion queue. %s files waiting for conversion. "
+                "%s left to transcribe. Processing rates: %.2f files/hour, %.2f files/minute.",
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                file,
+                CONVERT_QUEUE.qsize(),
+                TRANSCRIBE_QUEUE.qsize(),
+                len(proc_comp_timestamps_transcribe)
+                / (
+                    timedelta(
+                        seconds=len(proc_comp_timestamps_transcribe)
+                    ).total_seconds()
+                    / 60
+                ),
+                len(proc_comp_timestamps_transcribe)
+                / (
+                    timedelta(
+                        seconds=len(proc_comp_timestamps_transcribe)
+                    ).total_seconds()
+                    / 60
+                ),
+            )
         else:
-            logging.error(f"Transcription failed for {file}.")
+            logging.error("Transcription failed for %s.", file)
             skip_files.add(file)
             error_reason = None
             if transcription_method == "webui" and metadata.get("error"):
@@ -316,24 +171,218 @@ def transcriber(
                 "INSERT OR IGNORE INTO skip_files (known_file_id, reason) VALUES (?, ?)",
                 (known_file_id, skip_reason),
             )
-            TRANSCRIBE_QUEUE.task_done()
-            continue
 
-        logging.info(
-            f"SYSTIME: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | File {file} added to conversion queue. {CONVERT_QUEUE.qsize() + 1} files waiting for conversion. {TRANSCRIBE_QUEUE.qsize()} left to transcribe. Processing rates: {len(proc_comp_timestamps_transcribe) / (timedelta(seconds=len(proc_comp_timestamps_transcribe)).total_seconds() / 60):.2f} files/hour, {len(proc_comp_timestamps_transcribe) / (timedelta(seconds=len(proc_comp_timestamps_transcribe)).total_seconds() / 60):.2f} files/minute."
-        )
-        conversion_payload = {
-            "known_file_id": known_file_id,
-            "folder_path": folder_path,
-            "file_name": file_name,
-        }
-        execute_with_retry(
-            "INSERT INTO convert_queue (known_file_id) VALUES (?)", (known_file_id,)
-        )
-        CONVERT_QUEUE.put(conversion_payload)
+        TRANSCRIBE_QUEUE.task_done()
+
         if TRANSCRIBE_QUEUE.qsize() == 0:
             logging.info(
                 "All transcription tasks completed, entering housekeeping mode."
             )
             transcription_complete.set()
             TRANSCRIBE_ACTIVE.clear()
+
+    while True:
+        known_file_id = TRANSCRIBE_QUEUE.get()
+        start_time = datetime.now()
+        TRANSCRIBE_ACTIVE.set()
+
+        resolved = resolve_known_file(known_file_id)
+        if not resolved:
+            logging.error(
+                "File with known_file_id %s not found in database.", known_file_id
+            )
+            TRANSCRIBE_QUEUE.task_done()
+            continue
+
+        file_name, folder_path = resolved
+        file = os.path.join(folder_path, file_name)
+
+        if not file_name.endswith(tuple(audio_extensions)):
+            logging.info("Skipping non-audio file: %s", file)
+            TRANSCRIBE_QUEUE.task_done()
+            continue
+
+        logging.info(
+            "SYSTIME: %s | Starting transcription for %s.",
+            start_time.strftime("%Y-%m-%d %H:%M:%S"),
+            file,
+        )
+
+        if transcription_method == "webui":
+            pending_fragments = [
+                {"known_file_id": known_file_id, "file": file, "start_time": start_time}
+            ]
+            webui_task_states: Dict[str, str] = {}
+
+            def enqueue_pending_fragment(k_file_id: int, source: str) -> None:
+                fragment_record = resolve_known_file(k_file_id)
+                if not fragment_record:
+                    logging.error(
+                        "File with known_file_id %s not found while batching.",
+                        k_file_id,
+                    )
+                    TRANSCRIBE_QUEUE.task_done()
+                    return
+
+                frag_name, frag_folder = fragment_record
+                frag_path = os.path.join(frag_folder, frag_name)
+                if not frag_name.endswith(tuple(audio_extensions)):
+                    logging.info("Skipping non-audio file during batch: %s", frag_path)
+                    TRANSCRIBE_QUEUE.task_done()
+                    return
+
+                pending_fragments.append(
+                    {
+                        "known_file_id": k_file_id,
+                        "file": frag_path,
+                        "start_time": datetime.now(),
+                    }
+                )
+                logging.info(
+                    "Queued recorder fragment %s from %s pull (batch size=%d)",
+                    frag_path,
+                    source,
+                    len(pending_fragments),
+                )
+
+            while True:
+                try:
+                    additional_known_file_id = TRANSCRIBE_QUEUE.get_nowait()
+                except Empty:
+                    break
+                enqueue_pending_fragment(additional_known_file_id, "initial")
+
+            processed_count = 0
+            while pending_fragments:
+                fragment = pending_fragments.pop(0)
+                processed_count += 1
+                fragment_file = fragment["file"]
+                fragment_id = fragment["known_file_id"]
+                fragment_start = fragment["start_time"]
+
+                logging.info(
+                    "Submitting Whisper-WebUI batch item %d (pending: %d): %s",
+                    processed_count,
+                    len(pending_fragments),
+                    fragment_file,
+                )
+
+                if not webui_config.get("base_url"):
+                    error_message = "WebUI base_url is not configured"
+                    logging.error(error_message)
+                    fragment_metadata = {"error": error_message}
+                    fragment_output = None
+                    fragment_duration = 0.0
+                else:
+                    timeout_value = webui_config.get("timeout")
+                    if timeout_value is not None:
+                        try:
+                            timeout_value = float(timeout_value)
+                        except (TypeError, ValueError):
+                            logging.warning(
+                                "Invalid timeout value '%s' provided for WebUI backend; using no timeout",
+                                timeout_value,
+                            )
+                            timeout_value = None
+
+                    headers = dict(webui_config.get("headers") or {})
+                    api_key = webui_config.get("api_key")
+                    if api_key and "authorization" not in {
+                        key.lower(): key for key in headers
+                    }:
+                        headers["Authorization"] = f"Bearer {api_key}"
+
+                    auth_credentials = None
+                    if webui_config.get("username"):
+                        auth_credentials = (
+                            webui_config.get("username"),
+                            webui_config.get("password", ""),
+                        )
+
+                    fragment_output, fragment_duration, fragment_metadata = (
+                        transcribe_webui(
+                            fragment_file,
+                            base_url=webui_config.get("base_url", ""),
+                            options=webui_config.get("options"),
+                            poll_interval=float(webui_config.get("poll_interval", 2.0)),
+                            timeout=timeout_value,
+                            auth=auth_credentials,
+                            headers=headers,
+                            verify_ssl=_coerce_bool(
+                                webui_config.get("verify_ssl"), True
+                            ),
+                            status_path=webui_config.get(
+                                "status_path", "/task/{task_id}"
+                            ),
+                        )
+                    )
+
+                task_id = fragment_metadata.get("task_id")
+                if task_id:
+                    webui_task_states[str(task_id)] = (
+                        "completed" if not fragment_metadata.get("error") else "failed"
+                    )
+                    logging.info(
+                        "Whisper-WebUI task %s completed for %s (%d processed, %d pending).",
+                        task_id,
+                        fragment_file,
+                        processed_count,
+                        len(pending_fragments),
+                    )
+                if fragment_metadata.get("error"):
+                    logging.error(
+                        "Whisper-WebUI transcription error for %s: %s",
+                        fragment_file,
+                        fragment_metadata["error"],
+                    )
+
+                finalize_transcription(
+                    known_file_id=fragment_id,
+                    file=fragment_file,
+                    start_time=fragment_start,
+                    output_text=fragment_output,
+                    audio_duration=fragment_duration,
+                    metadata=fragment_metadata,
+                )
+
+                while True:
+                    try:
+                        new_known_file_id = TRANSCRIBE_QUEUE.get_nowait()
+                    except Empty:
+                        break
+                    enqueue_pending_fragment(new_known_file_id, "follow-up")
+
+                logging.info(
+                    "WebUI batch progress: %d completed, %d pending.",
+                    processed_count,
+                    len(pending_fragments),
+                )
+
+            if webui_task_states:
+                logging.info("WebUI task states: %s", webui_task_states)
+
+            continue
+
+        output_text = None
+        audio_duration = 0.0
+        metadata: Dict[str, object] = {}
+
+        if transcription_method == "python_whisper":
+            output_text = transcribe_audio(file)
+        elif transcription_method == "ctranslate2":
+            output_text, audio_duration = transcribe_ct2(file, model, skip_files)
+        elif transcription_method == "ctranslate2_nonpythonic":
+            output_text, audio_duration = transcribe_ct2_nonpythonic(file)
+        else:
+            logging.error(f"Unsupported transcription method: {transcription_method}")
+            TRANSCRIBE_QUEUE.task_done()
+            continue
+
+        finalize_transcription(
+            known_file_id=known_file_id,
+            file=file,
+            start_time=start_time,
+            output_text=output_text,
+            audio_duration=audio_duration,
+            metadata=metadata,
+        )
