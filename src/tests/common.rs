@@ -1,5 +1,5 @@
-use std::path::Path;
 use hound::{SampleFormat, WavSpec, WavWriter};
+use std::path::Path;
 
 pub fn write_dummy_wav(path: &Path) {
     let spec = WavSpec {

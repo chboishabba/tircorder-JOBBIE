@@ -17,4 +17,5 @@ hound = "3"
 # Use Bevy's ECS and application utilities for testing
 bevy_app = { version = "0.13", default-features = false }
 bevy_ecs = { version = "0.13", default-features = false }
+assert_cmd = "2"
 
