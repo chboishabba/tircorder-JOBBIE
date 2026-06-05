@@ -1,3 +1,4 @@
+import json
 from typing import Any, Dict, Optional
 
 import pytest
@@ -6,6 +7,7 @@ pytest.importorskip("librosa")
 pytest.importorskip("requests")
 
 from tircorder.interfaces.config import TircorderConfig
+from tircorder.transcriber import emit_webui_transcription_artifacts
 from tircorder.utils import (
     DEFAULT_WEBUI_CONFIG,
     get_transcription_backend,
@@ -314,3 +316,90 @@ def test_get_transcription_backend_merges_defaults() -> None:
     assert backend["backend"]["task_path_template"] == "/task/{identifier}"
     assert backend["downstream"]["sensiblaw"]["enabled"] is True
     assert backend["downstream"]["statibaker"]["enabled"] is False
+
+
+def test_emit_webui_transcription_artifacts_writes_raw_envelope_and_receipts(
+    tmp_path,
+) -> None:
+    audio_file = tmp_path / "call.wav"
+    audio_file.write_bytes(b"RIFF test audio")
+    artifact_dir = tmp_path / "artifacts"
+    transcript_payload = {
+        "text": "hello there",
+        "model": "large-v3",
+        "language": "en",
+        "segments": [
+            {
+                "text": "hello there",
+                "start": 0.0,
+                "end": 1.2,
+                "speaker": "SPEAKER_00",
+                "confidence": 0.91,
+            }
+        ],
+    }
+
+    emit_webui_transcription_artifacts(
+        audio_file=str(audio_file),
+        metadata={
+            "task_id": "task-1",
+            "protocol": "backend",
+            "completed_at": "2026-06-04T00:00:00+00:00",
+            "model": "large-v3",
+            "language": "en",
+            "transcript_payload": transcript_payload,
+        },
+        webui_config={
+            "emit_envelope": True,
+            "envelope_dir": str(artifact_dir),
+            "envelope_format": "sb_execution_envelope_v1",
+            "downstream": {
+                "persist_raw_transcript": True,
+                "sensiblaw": {"enabled": False},
+                "statibaker": {"enabled": False},
+            },
+        },
+    )
+
+    raw_path = artifact_dir / "call.whisperx_transcript.json"
+    envelope_path = artifact_dir / "call.execution_envelope.json"
+    receipts_path = artifact_dir / "call.downstream_receipts.json"
+
+    assert json.loads(raw_path.read_text(encoding="utf-8")) == transcript_payload
+    envelope_payload = json.loads(envelope_path.read_text(encoding="utf-8"))
+    assert envelope_payload["execution_envelope"]["source"] == "whisperx_webui"
+    assert envelope_payload["execution_envelope"]["segment_count"] == 1
+    assert envelope_payload["segment_events"][0]["data"]["confidence"] == 0.91
+    receipts = json.loads(receipts_path.read_text(encoding="utf-8"))
+    assert receipts["job_id"] == "task-1"
+    assert receipts["transcript_artifact_path"] == str(raw_path)
+    assert receipts["sinks"] == {}
+
+
+def test_emit_webui_transcription_artifacts_can_be_disabled(tmp_path) -> None:
+    audio_file = tmp_path / "call.wav"
+    audio_file.write_bytes(b"RIFF test audio")
+    artifact_dir = tmp_path / "artifacts"
+
+    emit_webui_transcription_artifacts(
+        audio_file=str(audio_file),
+        metadata={
+            "transcript_payload": {
+                "text": "hello",
+                "model": None,
+                "language": None,
+                "segments": [],
+            },
+        },
+        webui_config={
+            "emit_envelope": False,
+            "envelope_dir": str(artifact_dir),
+            "downstream": {
+                "persist_raw_transcript": False,
+                "sensiblaw": {"enabled": False},
+                "statibaker": {"enabled": False},
+            },
+        },
+    )
+
+    assert not artifact_dir.exists()

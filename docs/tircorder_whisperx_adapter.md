@@ -35,6 +35,8 @@ Segment event fields (each `type: audio_segment`):
 ## Non-goals
 - No summarization, sentiment, intent, emotion, or diagnosis labels.
 - No re-timestamping, re-segmentation, or diarization edits.
+- No SimulStreaming process orchestration; SimulStreaming JSONL output is
+  normalized only after another process has produced it.
 
 ## Configuration
 Set these under `transcription.webui` in the TiRCorder config:
@@ -53,6 +55,10 @@ When enabled, TiRCorder writes:
 - `<audio_stem>.downstream_receipts.json`
 
 If `envelope_dir` is unset, the file is written alongside the `.txt` transcript.
+The WebUI transcriber finalization path now performs this export after a
+successful `.txt` transcript write, so the envelope and receipt artifacts cannot
+get ahead of the text transcript. Optional downstream sink errors are recorded
+in receipts and do not block transcription completion.
 
 ## Provenance rules
 - Envelope IDs are derived from transcript + audio hashes.
@@ -63,3 +69,7 @@ If `envelope_dir` is unset, the file is written alongside the `.txt` transcript.
 - Provenance is present.
 - Segment confidence is retained.
 - No semantic labels are emitted.
+- WebUI finalization can emit raw transcript JSON, execution envelopes, and
+  downstream receipts without enabling SensibLaw or StatiBaker sinks.
+- SimulStreaming JSONL can be normalized into the same transcript payload shape
+  and passed through the SB envelope adapter as advisory capture evidence.

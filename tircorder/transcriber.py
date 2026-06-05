@@ -3,8 +3,9 @@ import os
 import sqlite3
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from queue import Empty, Queue
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from .state import export_queues_and_files, load_state
 from .utils import (
@@ -28,6 +29,83 @@ def _coerce_bool(value: Optional[object], default: bool = True) -> bool:
     if isinstance(value, str):
         return value.strip().lower() not in {"false", "0", "no", "off", ""}
     return bool(value)
+
+
+def emit_webui_transcription_artifacts(
+    *,
+    audio_file: str,
+    metadata: Mapping[str, Any],
+    webui_config: Mapping[str, Any],
+) -> None:
+    """Persist configured WebUI transcript artifacts without blocking completion."""
+
+    transcript_payload = metadata.get("transcript_payload")
+    if not isinstance(transcript_payload, Mapping):
+        return
+
+    from .downstream import (
+        fanout_whisperx_downstream,
+        write_downstream_receipts,
+        write_json_artifact,
+    )
+    from .sb_adapter import build_execution_envelope, write_execution_envelope
+
+    audio_path = Path(audio_file)
+    output_dir = (
+        Path(str(webui_config["envelope_dir"]))
+        if webui_config.get("envelope_dir")
+        else audio_path.parent
+    )
+    artifact_stem = output_dir / audio_path.stem
+    downstream_config = dict(webui_config.get("downstream") or {})
+
+    transcript_artifact_path: Path | None = None
+    execution_payload: dict[str, Any] | None = None
+    execution_envelope: Mapping[str, Any] | None = None
+
+    try:
+        if _coerce_bool(downstream_config.get("persist_raw_transcript"), True):
+            transcript_artifact_path = artifact_stem.with_suffix(
+                ".whisperx_transcript.json"
+            )
+            write_json_artifact(transcript_artifact_path, transcript_payload)
+
+        if _coerce_bool(webui_config.get("emit_envelope"), False):
+            execution_payload = build_execution_envelope(
+                transcript_payload,
+                audio_path=audio_path,
+                model=metadata.get("model"),
+                language=metadata.get("language"),
+                envelope_format=str(
+                    webui_config.get("envelope_format")
+                    or "sb_execution_envelope_v1"
+                ),
+            )
+            execution_envelope = execution_payload.get("execution_envelope")
+            write_execution_envelope(
+                artifact_stem.with_suffix(".execution_envelope.json"),
+                execution_payload,
+            )
+
+        has_enabled_sink = any(
+            bool(dict(downstream_config.get(key) or {}).get("enabled"))
+            for key in ("sensiblaw", "statibaker")
+        )
+        if transcript_artifact_path or execution_payload or has_enabled_sink:
+            receipts = fanout_whisperx_downstream(
+                audio_path=audio_path,
+                transcript_payload=transcript_payload,
+                execution_envelope=execution_envelope,
+                metadata=metadata,
+                downstream_config=downstream_config,
+                transcript_artifact_path=transcript_artifact_path,
+            )
+            write_downstream_receipts(
+                artifact_stem.with_suffix(".downstream_receipts.json"),
+                receipts,
+            )
+    except Exception as exc:
+        logging.error("Failed to emit WebUI transcript artifacts for %s: %s", audio_file, exc)
 
 
 def transcriber(
@@ -119,6 +197,12 @@ def transcriber(
                     elapsed_time,
                     real_time_factor,
                 )
+                if transcription_method == "webui":
+                    emit_webui_transcription_artifacts(
+                        audio_file=file,
+                        metadata=metadata,
+                        webui_config=webui_config,
+                    )
             except Exception as e:
                 logging.error("Error writing transcription output for %s: %s", file, e)
                 skip_files.add(file)

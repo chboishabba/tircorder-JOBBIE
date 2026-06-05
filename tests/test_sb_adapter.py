@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from tircorder.sb_adapter import build_execution_envelope, write_execution_envelope
+from tircorder.sb_adapter import (
+    build_browser_assist_session,
+    build_execution_envelope,
+    write_execution_envelope,
+)
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
@@ -100,3 +104,84 @@ def test_segment_key_filtering_and_skips_non_mapping_segments():
     assert "end" not in data
     assert "confidence" not in data
     assert "extra" not in data
+
+
+def test_browser_assist_session_hashes_page_fields_and_keeps_bounded_preview():
+    payload = build_browser_assist_session(
+        session_id="browser-assist-1",
+        task_label="find discussed item on page",
+        started_at="2026-06-04T00:00:00Z",
+        ended_at="2026-06-04T00:01:00Z",
+        browser="chrome",
+        page_url="https://example.test/private?q=secret",
+        page_title="Private Page Title",
+        text_preview="alpha beta gamma delta",
+        openrecall_entry_refs=["openrecall.entry:7"],
+        playwright_snapshot_refs=["snapshot-001.md"],
+        transcript_refs=["transcript:1"],
+        preview_chars=12,
+    )
+
+    assert payload["version"] == "browser_assist_session_v1"
+    assert payload["page_url_hash"].startswith("sha256:")
+    assert payload["page_title_hash"].startswith("sha256:")
+    assert "example.test" not in json.dumps(payload)
+    assert "Private Page Title" not in json.dumps(payload)
+    assert payload["text_preview"] == "alpha beta…"
+    assert payload["text_hash"].startswith("sha256:")
+    assert payload["openrecall_entry_refs"] == ["openrecall.entry:7"]
+    assert payload["playwright_snapshot_refs"] == ["snapshot-001.md"]
+    assert payload["transcript_refs"] == ["transcript:1"]
+    assert payload["non_authoritative"] is True
+    assert payload["artifact_hash"].startswith("sha256:")
+
+
+def test_browser_assist_metadata_only_suppresses_preview_but_keeps_hash():
+    payload = build_browser_assist_session(
+        session_id="browser-assist-2",
+        task_label="read page",
+        started_at="2026-06-04T00:00:00Z",
+        text_preview="visible page text",
+        storage_mode="metadata_only",
+    )
+
+    assert payload["storage_mode"] == "metadata_only"
+    assert payload["text_preview"] is None
+    assert payload["text_hash"].startswith("sha256:")
+
+
+def test_browser_assist_session_emits_no_semantic_labels():
+    payload = build_browser_assist_session(
+        session_id="browser-assist-3",
+        task_label="accessibility capture",
+        started_at="2026-06-04T00:00:00Z",
+        text_preview="observed only",
+    )
+
+    forbidden = {"summary", "sentiment", "intent", "emotion", "diagnosis", "risk_score"}
+    assert forbidden.isdisjoint(payload.keys())
+
+
+def test_browser_assist_session_preserves_pnf_residuals_as_observer_only():
+    pnf = {
+        "predicate": "user_requested_find_on_page",
+        "structural_signature": "browser_assist_task_candidate",
+        "roles": {"object": {"value": "discussed item", "entity_type": "ui_reference"}},
+        "wrapper": {"evidence_only": True},
+        "provenance": ["transcript:1", "playwright.snapshot:1"],
+    }
+
+    payload = build_browser_assist_session(
+        session_id="browser-assist-4",
+        task_label="find discussed item",
+        started_at="2026-06-04T00:00:00Z",
+        pnf_candidates=[pnf],
+        task_identity_residual="partial",
+        lifecycle_residual="no_typed_meet",
+    )
+
+    assert payload["pnf_candidates"] == [pnf]
+    assert payload["task_identity_residual"] == "partial"
+    assert payload["lifecycle_residual"] == "no_typed_meet"
+    assert payload["kanban_projection_policy"] == "observer_only"
+    assert payload["non_authoritative"] is True

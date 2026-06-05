@@ -16,6 +16,8 @@
 ## WhisperX-WebUI envelope export
 - Added a non-semantic adapter to emit SB execution envelopes plus segment events from WhisperX-WebUI transcripts.
 - Envelope export is controlled via `transcription.webui.emit_envelope` and writes alongside the transcript (or `envelope_dir`).
+- WebUI transcription finalization now wires normalized transcript payloads into raw transcript JSON, execution envelope, and downstream receipt artifacts when configured.
+- Added a SimulStreaming JSONL normalizer so external SimulStreaming output can feed the same Tircorder transcript payload and SB envelope path without Tircorder owning process orchestration.
 - Tests cover provenance, confidence retention, and absence of semantic labels.
 
 ## Health export connectors (meta-only by default)
