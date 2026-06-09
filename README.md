@@ -234,3 +234,6 @@ Massive thank you to
 [xuhuisheng](https://github.com/xuhuisheng/rocm-gfx803), and
 [robertrosenbusch](https://github.com/robertrosenbusch/gfx803_rocm) for making
 continued development on older ROCm/gfx803 environments more viable.
+
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/chboishabba/tircorder-JOBBIE)
