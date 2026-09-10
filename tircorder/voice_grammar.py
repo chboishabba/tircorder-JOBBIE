@@ -1,9 +1,9 @@
 """Anchor-dependent, namespaced spoken grammar registry.
 
 This layer models extensible command vocabulary as private lexemes rather than
-as one global string->action dictionary.  A surface form only acquires command
+as one global string->action dictionary. A surface form only acquires command
 meaning under an explicit namespace/context and, when required, a shared-anchor
-receipt.  Lookup returns candidate branches plus residual alternatives; it does
+receipt. Lookup returns candidate branches plus residual alternatives; it does
 not execute edits.
 """
 
@@ -137,7 +137,6 @@ class GrammarRegistry:
                     ),
                 )
             )
-
             if not (namespace_ok and context_ok and anchor_ok):
                 residual.append(rule.rule_id)
 
@@ -149,30 +148,32 @@ class GrammarRegistry:
         )
 
 
+def _builtin(rule_id: str, surface: str, kind: VoiceEditKind, argument: str = "") -> PrivateLexemeRule:
+    return PrivateLexemeRule(
+        rule_id=rule_id,
+        surface=surface,
+        intended_meaning=f"builtin editing operation {kind.value}",
+        contextual_use="",
+        namespace=GrammarNamespace.EDITING,
+        output_fibre=VoiceEditInterpretation.FORMATTING_COMMAND,
+        output_kind=kind,
+        argument=argument,
+        requires_shared_anchor=False,
+        source_provenance_reference="tircorder.voice_intent.rule-v1",
+    )
+
+
 BUILTIN_EDITING_GRAMMAR = GrammarRegistry(
     (
-        PrivateLexemeRule(
-            "builtin:new-paragraph",
-            "new paragraph",
-            "insert paragraph break",
-            "",
-            GrammarNamespace.EDITING,
-            VoiceEditInterpretation.FORMATTING_COMMAND,
-            VoiceEditKind.PARAGRAPH_BREAK,
-            requires_shared_anchor=False,
-            source_provenance_reference="tircorder.voice_intent.rule-v1",
-        ),
-        PrivateLexemeRule(
-            "builtin:question-mark",
-            "question mark",
-            "append question mark",
-            "",
-            GrammarNamespace.EDITING,
-            VoiceEditInterpretation.FORMATTING_COMMAND,
-            VoiceEditKind.PUNCTUATE,
-            argument="?",
-            requires_shared_anchor=False,
-            source_provenance_reference="tircorder.voice_intent.rule-v1",
-        ),
+        _builtin("builtin:new-paragraph", "new paragraph", VoiceEditKind.PARAGRAPH_BREAK),
+        _builtin("builtin:paragraph-break", "paragraph break", VoiceEditKind.PARAGRAPH_BREAK),
+        _builtin("builtin:make-list", "make that a list", VoiceEditKind.LISTIFY),
+        _builtin("builtin:listify", "listify", VoiceEditKind.LISTIFY),
+        _builtin("builtin:comma", "comma", VoiceEditKind.PUNCTUATE, ","),
+        _builtin("builtin:full-stop", "full stop", VoiceEditKind.PUNCTUATE, "."),
+        _builtin("builtin:period", "period", VoiceEditKind.PUNCTUATE, "."),
+        _builtin("builtin:question-mark", "question mark", VoiceEditKind.PUNCTUATE, "?"),
+        _builtin("builtin:colon", "colon", VoiceEditKind.PUNCTUATE, ":"),
+        _builtin("builtin:semicolon", "semicolon", VoiceEditKind.PUNCTUATE, ";"),
     )
 )
