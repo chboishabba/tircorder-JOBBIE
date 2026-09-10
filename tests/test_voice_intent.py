@@ -1,4 +1,10 @@
 from tircorder.voice_edits import VoiceEditInterpretation, VoiceEditKind
+from tircorder.voice_grammar import (
+    GrammarNamespace,
+    GrammarRegistry,
+    PrivateLexemeRule,
+    SharedAnchorReceipt,
+)
 from tircorder.voice_intent import (
     VoiceIntentContext,
     VoiceIntentPolicy,
@@ -126,3 +132,88 @@ def test_partial_chain_match_does_not_consume_document_content():
     assert len(segments) == 1
     assert segments[0].utterance == "new paragraph hello world"
     assert admit_unique_candidate(segments[0].candidates) is None
+
+
+def private_coding_registry():
+    return GrammarRegistry().register(
+        PrivateLexemeRule(
+            rule_id="personal:slap",
+            surface="slap",
+            intended_meaning="insert equals operator",
+            contextual_use="python-editing",
+            namespace=GrammarNamespace.CODING,
+            output_fibre=VoiceEditInterpretation.FORMATTING_COMMAND,
+            output_kind=VoiceEditKind.INSERT,
+            argument="=",
+            requires_shared_anchor=True,
+            source_provenance_reference="test-user-private-lexeme",
+        )
+    )
+
+
+def test_private_lexeme_surface_match_without_anchor_remains_non_executable_residual():
+    candidates = interpret_utterance(
+        "slap",
+        event_id="e11",
+        context=ctx(context_reference="python-editing"),
+        policy=VoiceIntentPolicy(command_mode=True, namespace=GrammarNamespace.CODING),
+        registry=private_coding_registry(),
+    )
+    private = next(c for c in candidates if c.grammar_rule_reference == "personal:slap")
+    assert private.score == 60
+    assert private.executable_under_policy is False
+    assert "personal:slap" in private.residual_reference
+    assert admit_unique_candidate(candidates) is None
+
+
+def test_private_lexeme_requires_matching_shared_anchor_and_context():
+    registry = private_coding_registry()
+    wrong_namespace = SharedAnchorReceipt(
+        "anchor:1", GrammarNamespace.EDITING, "python-editing"
+    )
+    candidates = interpret_utterance(
+        "slap",
+        event_id="e12",
+        context=ctx(context_reference="python-editing", shared_anchor=wrong_namespace),
+        policy=VoiceIntentPolicy(command_mode=True, namespace=GrammarNamespace.CODING),
+        registry=registry,
+    )
+    assert admit_unique_candidate(candidates) is None
+
+    correct_anchor = SharedAnchorReceipt(
+        "anchor:2", GrammarNamespace.CODING, "python-editing"
+    )
+    candidates = interpret_utterance(
+        "slap",
+        event_id="e13",
+        context=ctx(context_reference="python-editing", shared_anchor=correct_anchor),
+        policy=VoiceIntentPolicy(command_mode=True, namespace=GrammarNamespace.CODING),
+        registry=registry,
+    )
+    private = next(c for c in candidates if c.grammar_rule_reference == "personal:slap")
+    assert private.score == 100
+    assert private.executable_under_policy is True
+    admitted = admit_unique_candidate(candidates)
+    assert admitted is not None
+    assert admitted.argument == "="
+
+
+def test_same_private_surface_in_wrong_namespace_does_not_gain_command_meaning():
+    anchor = SharedAnchorReceipt("anchor:3", GrammarNamespace.CODING, "python-editing")
+    candidates = interpret_utterance(
+        "slap",
+        event_id="e14",
+        context=ctx(context_reference="python-editing", shared_anchor=anchor),
+        policy=VoiceIntentPolicy(command_mode=True, namespace=GrammarNamespace.DICTATION),
+        registry=private_coding_registry(),
+    )
+    private = next(c for c in candidates if c.grammar_rule_reference == "personal:slap")
+    assert private.executable_under_policy is False
+    assert admit_unique_candidate(candidates) is None
+
+
+def test_registry_extension_is_append_only_by_value():
+    base = GrammarRegistry()
+    extended = private_coding_registry()
+    assert base.rules == ()
+    assert len(extended.rules) == 1
