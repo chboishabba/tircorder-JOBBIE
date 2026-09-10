@@ -29,16 +29,16 @@ ordinary discourse marker, quoted speech, or an ASR artefact. Unresolved intent
 must not execute automatically.
 
 `tircorder.voice_edits` consumes interpreted events. `tircorder.voice_intent`
-now supplies the first deterministic interpreter layer without any learned
-model. Candidate generation and edit admission are separate.
+supplies the deterministic interpreter layer without a learned model. Candidate
+generation and edit admission are separate.
 
 ### Deterministic command grammar
 
-The initial grammar recognizes a deliberately small set of pinned phrases such
-as `new paragraph`, `make that a list`, and punctuation names. It also recognizes
-narrow relative-edit forms such as `actually <replacement>` and `delete that`,
-but those require a concrete recent target before they can become executable
-self-correction events.
+Built-in editing phrases such as `new paragraph`, `make that a list`, and
+punctuation names now live in a namespaced grammar registry rather than a flat
+global dictionary. Narrow relative-edit forms such as `actually <replacement>`
+and `delete that` still require a concrete recent target before they can become
+executable self-correction events.
 
 Inline command execution is fail-closed by default. A recognized command can be
 inspected as a candidate in normal dictation, but it is only auto-admissible
@@ -47,16 +47,49 @@ Literal document content remains a competing candidate.
 
 Registered exact commands may be chained in continuous speech using deterministic
 longest-match segmentation. Segmentation is all-or-nothing: if any part of the
-utterance is not covered by the exact grammar, no prefix is silently consumed as
-a command and the whole utterance stays in the ordinary interpretation path.
+utterance is not covered by currently applicable grammar rules, no prefix is
+silently consumed as a command and the whole utterance stays in the ordinary
+interpretation path.
 
-This design is cross-pollinated with Tavis Rudd's *Using Python to Code by Voice*
-(PyCon US 2013). Rudd described Dragonfly grammars as mappings from things one
-might say to actions the computer should perform, used a large user-extensible
-command vocabulary, and later noted that many commands could be chained in
-continuous speech. TiRCorder adopts that compositional grammar idea, not Rudd's
-specific command vocabulary or an assumption that grammar recognition proves
-speaker intent.
+### Private lexemes, namespaces, and shared anchors
+
+`tircorder.voice_grammar` models extensible shorthand as private lexemes with
+separate coordinates for:
+
+- surface form;
+- intended meaning;
+- contextual use;
+- grammar namespace (`dictation`, `editing`, `coding`, `shell`, `navigation`,
+  or `personal-custom`);
+- output fibre and edit kind;
+- whether a shared anchor is required;
+- source/provenance reference.
+
+This is cross-pollinated with the in-repo Tlurey private-language carrier, whose
+lexemes distinguish `surface`, `intendedMeaning`, `contextualUse`, and
+`requiresSharedAnchor`. A surface match does not by itself establish command
+meaning.
+
+For example, a user may register `slap` as a private coding shorthand for `=` in
+`python-editing`. The same recognized surface remains non-executable when:
+
+- the current namespace is `dictation` rather than `coding`;
+- the current context is not `python-editing`;
+- its required shared-anchor receipt is absent or inactive.
+
+The registry returns candidate branches plus residual rule references. Choosing
+one branch does not mutate the registry or erase the fact that other
+interpretations were available. Registry extension is append-only by value: a
+new registry is produced rather than rewriting the previous registry object.
+
+The Humour cross-pollination is narrower: its rationale/presenter/audience/
+content/delivery/humour-type/feedback coordinates are useful context-selection
+inputs, but they do not determine a private lexeme's command semantics.
+
+This design also retains the historical Rudd/Dragonfly precedent: user-defined
+voice grammars can be large, extensible, and chainable, while TiRCorder adds
+explicit namespace/context/anchor/admission boundaries rather than treating a
+recognized phrase as automatic authority to execute.
 
 ## Personal correction-activity metric
 
@@ -110,28 +143,33 @@ not diagnosis, scoring, prioritization, or automation.
 Turning metric collection off stops future metric derivation/export. It does
 not rewrite source audio, verbatim transcripts, or the historical edit ledger.
 
-## Implementation versus ideal formal boundary
+## Implementation versus formal boundary
 
 Current implementation:
 
 - `tircorder/voice_edits.py` owns typed edit events, deterministic rendering,
   opt-in summary derivation, and the counts-only StatiBaker projection;
+- `tircorder/voice_grammar.py` owns immutable namespaced/private lexeme rules,
+  shared-anchor receipts, candidate lookup and residual retention;
 - `tircorder/voice_intent.py` owns deterministic candidate interpretation,
-  fail-closed edit admission, and exact-command chaining;
+  fail-closed edit admission, and context-aware exact-command chaining;
 - `tircorder/voice_edit_config.py` reads fail-closed settings from the normal
-  TiRCorder config path;
-- the existing TiRCorder downstream path remains responsible for transcript
-  artifacts and suite fan-out.
+  TiRCorder config path.
 
-Formal ideal:
+Formal owners:
 
 - `DASHI.Interop.TiRCorderVoiceEditInteroceptionAntiPanopticonExact` separates
   verbatim/rendered/edit/metric carriers and permissions;
 - `DASHI.Interop.TiRCorderSpokenIntentGrammarRuddCrossPollinationExact` separates
   recognition, candidate intent, admission, chained command segmentation and
-  execution, with explicit Rudd-source provenance.
+  execution, with explicit Rudd-source provenance;
+- `DASHI.Interop.TiRCorderHumourTlureyContextIndexedGrammarExact` reuses the
+  actual Tlurey private-language, quotient/residual and trace owners together
+  with the Humour context family;
+- `DASHI.Interop.TiRCorderTlureyPrivateLexemeRuntimeParityExact` mirrors the
+  executable namespace/shared-anchor/residual seam and carries the `slap`
+  regression fixture.
 
-The next implementation layer is UI/runtime wiring: obtain a bounded recent
-edit target from the rendered-document state, feed recognized utterances through
-`tircorder.voice_intent`, display unresolved competing fibres when necessary,
-and append only admitted `VoiceEditEvent`s to the edit ledger.
+The next implementation layer is bounded recent-target derivation from rendered
+document state, followed by end-to-end tests such as `Send it Friday — actually
+Monday` while preserving the original verbatim carrier and candidate residuals.
