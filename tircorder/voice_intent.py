@@ -1,22 +1,15 @@
 """Deterministic spoken-intent interpreter for TiRCorder.
 
-This module intentionally contains no learned model. It maps a small, pinned
-command grammar into *candidate* voice-edit events. Recognition remains an ASR
-concern; this layer decides whether recognized words may be consumed as document
-content or as an edit/control instruction.
+This module intentionally contains no learned model. It maps recognized speech
+into candidate voice-edit fibres through a pinned, namespaced grammar registry.
+Recognition, surface match, contextual meaning, admission and execution remain
+distinct coordinates.
 
-The default policy is fail-closed for inline execution. Exact command phrases
-can be recognized in ordinary dictation, but they are only auto-admitted when
-command mode is active or inline commands have been explicitly enabled.
-Ambiguous discourse markers such as ``actually`` remain document content unless
-they occur in the narrow correction form ``actually <replacement>`` and a
-concrete recent target is available.
-
-A second entry point, :func:`interpret_command_chain`, supports the historical
-Dragonfly/Rudd idea that several registered commands may be spoken continuously.
-It uses deterministic longest-match segmentation and only segments an utterance
-when the *entire* utterance can be covered by registered exact command phrases;
-otherwise the utterance stays intact for ordinary candidate interpretation.
+Private/custom lexemes may require a shared-anchor receipt. Candidate generation
+retains competing interpretations and residual rule references. Continuous
+command chains use deterministic longest-match segmentation and only segment an
+utterance when the entire utterance is covered by currently applicable grammar
+rules; otherwise the utterance stays intact.
 """
 
 from __future__ import annotations
@@ -26,14 +19,21 @@ import re
 from typing import Iterable
 
 from .voice_edits import VoiceEditEvent, VoiceEditInterpretation, VoiceEditKind
+from .voice_grammar import (
+    BUILTIN_EDITING_GRAMMAR,
+    GrammarNamespace,
+    GrammarRegistry,
+    SharedAnchorReceipt,
+)
 
-INTERPRETER_REFERENCE = "tircorder.voice_intent.rule-v1"
+INTERPRETER_REFERENCE = "tircorder.voice_intent.rule-v2"
 
 
 @dataclass(frozen=True)
 class VoiceIntentPolicy:
     command_mode: bool = False
     allow_inline_commands: bool = False
+    namespace: GrammarNamespace = GrammarNamespace.EDITING
 
 
 @dataclass(frozen=True)
@@ -41,6 +41,8 @@ class VoiceIntentContext:
     source_span_reference: str
     recent_target: str = ""
     selection_active: bool = False
+    context_reference: str = ""
+    shared_anchor: SharedAnchorReceipt | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,8 @@ class VoiceIntentCandidate:
     score: int
     rationale: str
     executable_under_policy: bool
+    grammar_rule_reference: str = ""
+    residual_reference: str = ""
 
 
 @dataclass(frozen=True)
@@ -87,26 +91,13 @@ def _command_executable(policy: VoiceIntentPolicy) -> bool:
     return policy.command_mode or policy.allow_inline_commands
 
 
-_EXACT_COMMANDS: dict[str, tuple[VoiceEditKind, str]] = {
-    "new paragraph": (VoiceEditKind.PARAGRAPH_BREAK, ""),
-    "paragraph break": (VoiceEditKind.PARAGRAPH_BREAK, ""),
-    "make that a list": (VoiceEditKind.LISTIFY, ""),
-    "listify": (VoiceEditKind.LISTIFY, ""),
-    "comma": (VoiceEditKind.PUNCTUATE, ","),
-    "full stop": (VoiceEditKind.PUNCTUATE, "."),
-    "period": (VoiceEditKind.PUNCTUATE, "."),
-    "question mark": (VoiceEditKind.PUNCTUATE, "?"),
-    "colon": (VoiceEditKind.PUNCTUATE, ":"),
-    "semicolon": (VoiceEditKind.PUNCTUATE, ";"),
-}
-
-
 def interpret_utterance(
     utterance: str,
     *,
     event_id: str,
     context: VoiceIntentContext,
     policy: VoiceIntentPolicy = VoiceIntentPolicy(),
+    registry: GrammarRegistry = BUILTIN_EDITING_GRAMMAR,
 ) -> tuple[VoiceIntentCandidate, ...]:
     """Return deterministic competing intent candidates for one utterance."""
 
@@ -130,20 +121,32 @@ def interpret_utterance(
         )
     ]
 
-    if text in _EXACT_COMMANDS:
-        kind, argument = _EXACT_COMMANDS[text]
+    lookup = registry.lookup(
+        raw,
+        namespace=policy.namespace,
+        context_reference=context.context_reference,
+        anchor=context.shared_anchor,
+    )
+    residual_ref = "|".join(lookup.residual_surfaces)
+    for branch in lookup.candidates:
         out.append(
             VoiceIntentCandidate(
                 event=_event(
-                    event_id=f"{event_id}:command",
-                    kind=kind,
-                    interpretation=VoiceEditInterpretation.FORMATTING_COMMAND,
+                    event_id=f"{event_id}:grammar:{branch.rule.rule_id}",
+                    kind=branch.rule.output_kind,
+                    interpretation=branch.rule.output_fibre,
                     context=context,
-                    argument=argument,
+                    argument=branch.rule.argument,
                 ),
-                score=100,
-                rationale="exact pinned formatting-command phrase",
-                executable_under_policy=_command_executable(policy),
+                score=branch.candidate_score,
+                rationale=branch.rationale,
+                executable_under_policy=(
+                    branch.anchor_satisfied
+                    and branch.context_satisfied
+                    and _command_executable(policy)
+                ),
+                grammar_rule_reference=branch.rule.rule_id,
+                residual_reference=residual_ref,
             )
         )
 
@@ -234,14 +237,46 @@ def interpret_utterance(
     return tuple(sorted(out, key=lambda c: (-c.score, c.event.event_id)))
 
 
-def _segment_exact_command_chain(text: str) -> tuple[str, ...] | None:
-    """Cover ``text`` completely with registered commands using longest match."""
+def _applicable_exact_surfaces(
+    registry: GrammarRegistry,
+    *,
+    policy: VoiceIntentPolicy,
+    context: VoiceIntentContext,
+) -> tuple[str, ...]:
+    surfaces: list[str] = []
+    for rule in registry.rules:
+        lookup = registry.lookup(
+            rule.surface,
+            namespace=policy.namespace,
+            context_reference=context.context_reference,
+            anchor=context.shared_anchor,
+        )
+        if any(
+            branch.rule.rule_id == rule.rule_id
+            and branch.anchor_satisfied
+            and branch.context_satisfied
+            for branch in lookup.candidates
+        ):
+            surfaces.append(_norm(rule.surface))
+    return tuple(sorted(set(surfaces)))
+
+
+def _segment_exact_command_chain(
+    text: str,
+    *,
+    policy: VoiceIntentPolicy,
+    context: VoiceIntentContext,
+    registry: GrammarRegistry,
+) -> tuple[str, ...] | None:
+    """Cover text completely with currently applicable rules, longest-first."""
 
     words = _norm(text).split()
     if not words:
         return ()
     phrases = sorted(
-        ((phrase.split(), phrase) for phrase in _EXACT_COMMANDS),
+        ((phrase.split(), phrase) for phrase in _applicable_exact_surfaces(
+            registry, policy=policy, context=context
+        )),
         key=lambda item: (-len(item[0]), item[1]),
     )
     out: list[str] = []
@@ -267,15 +302,16 @@ def interpret_command_chain(
     event_id: str,
     context: VoiceIntentContext,
     policy: VoiceIntentPolicy = VoiceIntentPolicy(),
+    registry: GrammarRegistry = BUILTIN_EDITING_GRAMMAR,
 ) -> tuple[VoiceIntentSegment, ...]:
-    """Interpret a fully registered continuous command chain deterministically.
+    """Interpret a fully covered continuous command chain deterministically."""
 
-    If any part of the utterance is not covered by the exact grammar, the whole
-    utterance is returned as one segment. This prevents partial grammar matches
-    from silently consuming nearby document content.
-    """
-
-    chain = _segment_exact_command_chain(utterance)
+    chain = _segment_exact_command_chain(
+        utterance,
+        policy=policy,
+        context=context,
+        registry=registry,
+    )
     if chain is None or len(chain) <= 1:
         return (
             VoiceIntentSegment(
@@ -286,6 +322,7 @@ def interpret_command_chain(
                     event_id=event_id,
                     context=context,
                     policy=policy,
+                    registry=registry,
                 ),
             ),
         )
@@ -298,6 +335,7 @@ def interpret_command_chain(
                 event_id=f"{event_id}:segment:{i}",
                 context=context,
                 policy=policy,
+                registry=registry,
             ),
         )
         for i, phrase in enumerate(chain)
