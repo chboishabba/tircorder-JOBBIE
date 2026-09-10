@@ -3,6 +3,7 @@ from tircorder.voice_intent import (
     VoiceIntentContext,
     VoiceIntentPolicy,
     admit_unique_candidate,
+    interpret_command_chain,
     interpret_utterance,
 )
 
@@ -88,7 +89,7 @@ def test_delete_that_requires_target_and_command_permission():
     assert admitted.argument == "wrong words"
 
 
-def test_hyphen_or_weird_vocabulary_is_not_special_without_registered_grammar():
+def test_unregistered_weird_vocabulary_stays_literal_content():
     candidates = interpret_utterance(
         "slap jive message string",
         event_id="e8",
@@ -98,3 +99,30 @@ def test_hyphen_or_weird_vocabulary_is_not_special_without_registered_grammar():
     assert len(candidates) == 1
     assert candidates[0].event.interpretation is VoiceEditInterpretation.DOCUMENT_CONTENT
     assert admit_unique_candidate(candidates) is None
+
+
+def test_registered_commands_can_chain_by_longest_exact_match():
+    segments = interpret_command_chain(
+        "new paragraph question mark",
+        event_id="e9",
+        context=ctx(),
+        policy=VoiceIntentPolicy(command_mode=True),
+    )
+    assert [s.utterance for s in segments] == ["new paragraph", "question mark"]
+    admitted = [admit_unique_candidate(s.candidates) for s in segments]
+    assert [e.kind for e in admitted if e is not None] == [
+        VoiceEditKind.PARAGRAPH_BREAK,
+        VoiceEditKind.PUNCTUATE,
+    ]
+
+
+def test_partial_chain_match_does_not_consume_document_content():
+    segments = interpret_command_chain(
+        "new paragraph hello world",
+        event_id="e10",
+        context=ctx(),
+        policy=VoiceIntentPolicy(command_mode=True),
+    )
+    assert len(segments) == 1
+    assert segments[0].utterance == "new paragraph hello world"
+    assert admit_unique_candidate(segments[0].candidates) is None
